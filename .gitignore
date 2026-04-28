@@ -1,0 +1,16 @@
+# Dependências
+node_modules/
+dist/
+
+# Variáveis de ambiente — NUNCA commitar!
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.DS_Store
+.vscode/
