@@ -201,8 +201,27 @@ function PedidosPage() {
   const [expandido, setExpandido] = useState(null);
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [toast, setToastP] = useState("");
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
+  const [countdown, setCountdown] = useState(5);
 
-  useEffect(() => { fetchPedidos(); }, []);
+  // Auto-refresh a cada 5 segundos
+  useEffect(() => {
+    fetchPedidos();
+    const refreshInterval = setInterval(() => {
+      fetchPedidos();
+    }, 5000);
+    return () => clearInterval(refreshInterval);
+  }, []);
+
+  // Countdown visual até próxima atualização
+  useEffect(() => {
+    if (!ultimaAtualizacao) return;
+    setCountdown(5);
+    const tick = setInterval(() => {
+      setCountdown(c => (c <= 1 ? 5 : c - 1));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [ultimaAtualizacao]);
 
   async function fetchPedidos() {
     setLoading(true);
@@ -212,6 +231,7 @@ function PedidosPage() {
       .order("created_at", { ascending: false });
     setPedidos(data || []);
     setLoading(false);
+    setUltimaAtualizacao(new Date());
   }
 
   function showToastP(msg) { setToastP(msg); setTimeout(() => setToastP(""), 3000); }
@@ -265,7 +285,14 @@ function PedidosPage() {
     <>
       <div className="page-header">
         <h2>Pedidos</h2>
-        <p>Acompanhe e gerencie todos os pedidos em tempo real</p>
+        <p>
+          Acompanhe e gerencie todos os pedidos em tempo real
+          {ultimaAtualizacao && (
+            <span style={{ marginLeft:12,fontSize:12,color:"var(--success)",fontWeight:600 }}>
+              ● Atualizado às {ultimaAtualizacao.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})} · próxima em {countdown}s
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Resumo do dia */}
@@ -297,8 +324,11 @@ function PedidosPage() {
           </button>
         ))}
         <button onClick={fetchPedidos}
-          style={{ marginLeft:"auto",padding:"8px 14px",borderRadius:10,border:"1px solid var(--border)",background:"var(--surface)",color:"var(--muted)",cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif" }}>
-          🔄 Atualizar
+          style={{ marginLeft:"auto",padding:"8px 14px",borderRadius:10,border:"1px solid var(--border)",background:"var(--surface)",color:"var(--muted)",cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:6 }}>
+          <span style={{ display:"inline-block",animation:loading?"spin 1s linear infinite":"none" }}>🔄</span>
+          <span>Atualizar</span>
+          <span style={{ background:"rgba(76,175,125,0.2)",color:"var(--success)",borderRadius:6,padding:"1px 7px",fontSize:11,fontWeight:700 }}>{countdown}s</span>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </button>
       </div>
 

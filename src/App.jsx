@@ -149,212 +149,387 @@ const DRINKS = [
 ];
 
 // ─── STONE PAYMENT ────────────────────────────────────────────────────────────
+// Fluxo: identify → method → [awaiting_machine] → [pix_qr / cash_confirm] → success
+// O pedido só é gravado no banco com status "pago" APÓS confirmação real do pagamento.
+// Para dinheiro: confirmação imediata pelo operador.
+// Para débito/crédito/pix: o operador clica "Aprovado na maquininha" para confirmar.
 function StoneModal({ cart, total, onClose, onSuccess }) {
-  const [step, setStep] = useState("identify");
+  const [step, setStep] = useState("identify"); // identify | method | awaiting_machine | pix_qr | cash_confirm | saving | success | error
   const [nomeCliente, setNomeCliente] = useState("");
   const [mesa, setMesa] = useState("");
   const [method, setMethod] = useState(null);
   const [installments, setInstallments] = useState(1);
-  const [progress, setProgress] = useState(0);
-  const [saveError, setSaveError] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [nsu] = useState(() => String(Math.floor(Math.random()*9e6)+1e6));
+  const [pixCode] = useState(() => {
+    // Simula código EMV PIX (na integração real viria da API Stone)
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    return Array.from({length:32}, ()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+  });
 
   const methods = [
-    { id: "debit", label: "Débito", icon: "💳" },
-    { id: "credit1x", label: "Crédito à Vista", icon: "💳" },
-    { id: "credit", label: "Crédito Parcelado", icon: "💳" },
-    { id: "pix", label: "PIX", icon: "⚡" },
-    { id: "cash", label: "Dinheiro", icon: "💵" },
+    { id: "debit",   label: "Débito",            icon: "💳", desc: "Cartão de débito na maquininha" },
+    { id: "credit1x",label: "Crédito à Vista",   icon: "💳", desc: "Crédito sem parcelamento" },
+    { id: "credit",  label: "Crédito Parcelado",  icon: "💳", desc: "Parcelamento disponível" },
+    { id: "pix",     label: "PIX",                icon: "⚡", desc: "QR Code na maquininha Stone" },
+    { id: "cash",    label: "Dinheiro",           icon: "💵", desc: "Pagamento em espécie" },
   ];
 
   const fee = method === "credit" ? 0.0299 : 0;
   const finalTotal = total * (1 + fee);
   const installmentVal = method === "credit" ? finalTotal / installments : finalTotal;
+  const selMethod = methods.find(m => m.id === method);
 
-  async function pay() {
-    setStep("processing");
-    setSaveError(false);
-    let p = 0;
-    const t = setInterval(() => {
-      p += Math.random() * 15 + 6;
-      if (p >= 100) { p = 100; clearInterval(t); }
-      setProgress(Math.min(p, 100));
-    }, 200);
-
-    // Salva o pedido como "aguardando_pagamento" antes de mostrar sucesso
-    const { error } = await supabase.from("pedidos").insert([{
-      itens: cart,
-      total: total,
-      metodo_pagamento: method,
-      nome_cliente: nomeCliente.trim() || "Cliente",
-      mesa: mesa.trim() || "-",
-      status: "aguardando_pagamento"
-    }]);
-
-    clearInterval(t);
-    setProgress(100);
-
-    if (error) {
-      console.error("Erro ao salvar pedido:", error);
-      setSaveError(true);
-      setStep("method");
-      return;
-    }
-
-    setTimeout(() => setStep("awaiting"), 300);
+  // Redireciona para a tela correta de acordo com o método
+  function irParaMaquininha() {
+    if (method === "pix") setStep("pix_qr");
+    else if (method === "cash") setStep("cash_confirm");
+    else setStep("awaiting_machine"); // débito ou crédito
   }
 
-  async function confirmarPagamento() {
-    // Atualiza status para "pago" — chamado quando o operador confirma na maquininha
-    await supabase.from("pedidos")
-      .update({ status: "pago" })
-      .eq("nome_cliente", nomeCliente.trim() || "Cliente")
-      .eq("status", "aguardando_pagamento")
-      .order("created_at", { ascending: false })
-      .limit(1);
+  // Salva o pedido no Supabase como "pago" — chamado SOMENTE após confirmação real
+  async function salvarPedidoPago() {
+    setStep("saving");
+    setSaveError("");
+    const { error } = await supabase.from("pedidos").insert([{
+      itens: cart,
+      total: finalTotal,
+      metodo_pagamento: method,
+      parcelas: method === "credit" ? installments : null,
+      nome_cliente: nomeCliente.trim() || "Cliente",
+      mesa: mesa.trim() || "-",
+      status: "pago",
+      nsu,
+    }]);
+    if (error) {
+      console.error("Erro ao salvar pedido:", error);
+      setSaveError("Erro ao registrar pedido no sistema. Tente novamente.");
+      setStep("error");
+      return;
+    }
     setStep("success");
   }
 
-  const selMethod = methods.find(m => m.id === method);
-
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }}>
-      <div style={{ background:"#fff",borderRadius:20,width:"100%",maxWidth:400,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
-        <div style={{ background:"#00A868",padding:"18px 22px",display:"flex",alignItems:"center",gap:10 }}>
-          <span style={{ background:"rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 12px",fontFamily:"sans-serif",fontWeight:900,fontSize:17,color:"#fff",letterSpacing:-0.5 }}>stone</span>
-          <span style={{ color:"rgba(255,255,255,0.8)",fontSize:13,fontFamily:"sans-serif" }}>Terminal de Pagamento</span>
-          <button onClick={onClose} style={{ marginLeft:"auto",background:"none",border:"none",color:"#fff",fontSize:22,cursor:"pointer" }}>×</button>
+      <div style={{ background:"#fff",borderRadius:20,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",maxHeight:"95vh",display:"flex",flexDirection:"column" }}>
+
+        {/* Header Stone */}
+        <div style={{ background:"#00A868",padding:"16px 22px",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
+          <span style={{ background:"rgba(255,255,255,0.25)",borderRadius:8,padding:"4px 12px",fontFamily:"sans-serif",fontWeight:900,fontSize:17,color:"#fff",letterSpacing:-0.5 }}>stone</span>
+          <span style={{ color:"rgba(255,255,255,0.85)",fontSize:13,fontFamily:"sans-serif" }}>Terminal de Pagamento</span>
+          {(step==="identify"||step==="method"||step==="error") && (
+            <button onClick={onClose} style={{ marginLeft:"auto",background:"none",border:"none",color:"#fff",fontSize:22,cursor:"pointer",lineHeight:1 }}>×</button>
+          )}
         </div>
-        <div style={{ padding:"22px 22px 26px",fontFamily:"sans-serif" }}>
+
+        <div style={{ padding:"22px 22px 26px",fontFamily:"sans-serif",overflowY:"auto",flex:1 }}>
+
+          {/* ── STEP: IDENTIFY ────────────────────────────────── */}
           {step === "identify" && (
             <div>
-              <p style={{ fontWeight:700,fontSize:16,color:C.dark,margin:"0 0 4px",fontFamily:"Georgia,serif" }}>Identificação</p>
-              <p style={{ fontSize:12,color:C.gray,margin:"0 0 18px" }}>Informe os dados antes de pagar</p>
+              <p style={{ fontWeight:700,fontSize:16,color:C.dark,margin:"0 0 4px",fontFamily:"Georgia,serif" }}>Identificação do Pedido</p>
+              <p style={{ fontSize:12,color:C.gray,margin:"0 0 18px" }}>Preencha antes de prosseguir com o pagamento</p>
+
               <div style={{ marginBottom:14 }}>
-                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Nome do Cliente</label>
+                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Nome do Cliente *</label>
                 <input
                   placeholder="Ex: João Silva"
                   value={nomeCliente}
                   onChange={e => setNomeCliente(e.target.value)}
-                  style={{ width:"100%",padding:"10px 13px",border:"1.5px solid #DDD",borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif" }}
+                  autoFocus
+                  style={{ width:"100%",padding:"10px 13px",border:`1.5px solid ${nomeCliente?"#00A868":"#DDD"}`,borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif",transition:"border-color 0.2s" }}
                 />
               </div>
-              <div style={{ marginBottom:22 }}>
-                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Mesa / Identificação</label>
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Mesa / Identificação *</label>
                 <input
-                  placeholder="Ex: Mesa 5 ou Delivery"
+                  placeholder="Ex: Mesa 5, Balcão, Delivery…"
                   value={mesa}
                   onChange={e => setMesa(e.target.value)}
-                  style={{ width:"100%",padding:"10px 13px",border:"1.5px solid #DDD",borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif" }}
+                  style={{ width:"100%",padding:"10px 13px",border:`1.5px solid ${mesa?"#00A868":"#DDD"}`,borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif",transition:"border-color 0.2s" }}
                 />
               </div>
-              <div style={{ background:"#F9F6F1",borderRadius:10,padding:"12px 14px",marginBottom:18 }}>
-                <p style={{ fontSize:12,color:C.gray,margin:"0 0 4px" }}>Total do pedido</p>
-                <p style={{ fontSize:24,fontWeight:800,color:C.dark,margin:0,fontFamily:"sans-serif" }}>R$ {total.toFixed(2).replace(".",",")}</p>
+
+              {/* Resumo dos itens */}
+              <div style={{ background:"#F9F6F1",borderRadius:10,padding:"12px 14px",marginBottom:20,maxHeight:160,overflowY:"auto" }}>
+                <p style={{ fontSize:11,color:C.gray,margin:"0 0 8px",textTransform:"uppercase",letterSpacing:1 }}>Itens do pedido</p>
+                {cart.map((item,i) => (
+                  <div key={i} style={{ display:"flex",justifyContent:"space-between",fontSize:13,padding:"3px 0",borderBottom:"1px solid #EAE4DA" }}>
+                    <span style={{ color:C.dark }}>{item.name}</span>
+                    <span style={{ color:C.red,fontWeight:700,whiteSpace:"nowrap",marginLeft:8 }}>R$ {Number(item.price).toFixed(2).replace(".",",")}</span>
+                  </div>
+                ))}
+                <div style={{ display:"flex",justifyContent:"space-between",marginTop:8,fontSize:15,fontWeight:800 }}>
+                  <span style={{ color:C.dark }}>Total</span>
+                  <span style={{ color:C.red }}>R$ {total.toFixed(2).replace(".",",")}</span>
+                </div>
               </div>
+
               <button
                 onClick={() => setStep("method")}
-                style={{ width:"100%",padding:13,background:C.red,color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer" }}>
+                disabled={!nomeCliente.trim() || !mesa.trim()}
+                style={{ width:"100%",padding:13,background:nomeCliente.trim()&&mesa.trim()?C.red:"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:nomeCliente.trim()&&mesa.trim()?"pointer":"not-allowed",transition:"background 0.2s" }}>
                 Continuar para Pagamento →
               </button>
             </div>
           )}
 
-          {step === "method" && (<>
-            <div style={{ textAlign:"center",marginBottom:18 }}>
-              <p style={{ color:C.gray,fontSize:12,margin:"0 0 4px",textTransform:"uppercase",letterSpacing:1 }}>Total do pedido</p>
-              <p style={{ fontSize:30,fontWeight:800,color:C.dark,margin:0 }}>R$ {total.toFixed(2).replace(".",",")}</p>
-            </div>
-            {saveError && <div style={{ background:"#FFF0F0",border:"1px solid #FFAAAA",borderRadius:9,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#C00",fontFamily:"sans-serif" }}>⚠️ Erro ao registrar pedido. Tente novamente.</div>}
-            <p style={{ fontSize:11,fontWeight:700,color:C.gray,textTransform:"uppercase",letterSpacing:1,margin:"0 0 10px" }}>Forma de pagamento</p>
-            <div style={{ display:"flex",flexDirection:"column",gap:7,marginBottom:14 }}>
-              {methods.map(m => (
-                <button key={m.id} onClick={() => setMethod(m.id)}
-                  style={{ display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderRadius:10,border:`2px solid ${method===m.id?"#00A868":"#E5E5E5"}`,background:method===m.id?"#F0FBF5":"#fff",cursor:"pointer",textAlign:"left" }}>
-                  <span style={{ fontSize:18 }}>{m.icon}</span>
-                  <span style={{ fontWeight:600,color:C.dark,fontSize:14 }}>{m.label}</span>
-                  {method===m.id && <span style={{ marginLeft:"auto",color:"#00A868",fontSize:16 }}>✓</span>}
-                </button>
-              ))}
-            </div>
-            {method === "credit" && (
-              <div style={{ background:"#F8F8F8",borderRadius:10,padding:"12px 14px",marginBottom:14 }}>
-                <p style={{ fontSize:12,fontWeight:700,color:C.gray,margin:"0 0 8px" }}>Parcelas (taxa 2,99%)</p>
-                <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
-                  {[1,2,3,4,6,10,12].map(n => (
-                    <button key={n} onClick={() => setInstallments(n)}
-                      style={{ padding:"6px 12px",borderRadius:7,border:`1.5px solid ${installments===n?"#00A868":"#DDD"}`,background:installments===n?"#F0FBF5":"#fff",cursor:"pointer",fontSize:12,fontWeight:700,color:installments===n?"#00A868":C.dark }}>
-                      {n}x
-                    </button>
-                  ))}
+          {/* ── STEP: METHOD ──────────────────────────────────── */}
+          {step === "method" && (
+            <>
+              <div style={{ display:"flex",alignItems:"center",marginBottom:18,gap:10 }}>
+                <button onClick={()=>setStep("identify")} style={{ background:"none",border:"1px solid #DDD",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,color:C.gray }}>← Voltar</button>
+                <div>
+                  <p style={{ margin:0,fontWeight:700,color:C.dark,fontSize:14 }}>{nomeCliente} · {mesa}</p>
+                  <p style={{ margin:0,fontSize:22,fontWeight:800,color:"#00A868" }}>R$ {total.toFixed(2).replace(".",",")}</p>
                 </div>
-                <p style={{ margin:"8px 0 0",fontSize:12,color:C.gray }}>
-                  {installments}x de <strong style={{ color:C.dark }}>R$ {installmentVal.toFixed(2).replace(".",",")}</strong>
-                  {installments>1&&<span> = R$ {finalTotal.toFixed(2).replace(".",",")}</span>}
-                </p>
               </div>
-            )}
-            {method === "pix" && (
-              <div style={{ background:"#F0FBF5",borderRadius:10,padding:14,marginBottom:14,textAlign:"center" }}>
-                <div style={{ fontSize:40,marginBottom:4 }}>⚡</div>
-                <p style={{ fontSize:12,color:C.gray,margin:0 }}>QR Code PIX será gerado na maquininha Stone</p>
+
+              <p style={{ fontSize:11,fontWeight:700,color:C.gray,textTransform:"uppercase",letterSpacing:1,margin:"0 0 10px" }}>Forma de pagamento</p>
+              <div style={{ display:"flex",flexDirection:"column",gap:7,marginBottom:14 }}>
+                {methods.map(m => (
+                  <button key={m.id} onClick={() => setMethod(m.id)}
+                    style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:10,border:`2px solid ${method===m.id?"#00A868":"#E5E5E5"}`,background:method===m.id?"#F0FBF5":"#fff",cursor:"pointer",textAlign:"left",transition:"all 0.15s" }}>
+                    <span style={{ fontSize:20 }}>{m.icon}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:700,color:C.dark,fontSize:14 }}>{m.label}</div>
+                      <div style={{ fontSize:11,color:C.gray,marginTop:1 }}>{m.desc}</div>
+                    </div>
+                    <span style={{ width:20,height:20,borderRadius:"50%",border:`2px solid ${method===m.id?"#00A868":"#DDD"}`,background:method===m.id?"#00A868":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                      {method===m.id && <span style={{ color:"#fff",fontSize:12,lineHeight:1 }}>✓</span>}
+                    </span>
+                  </button>
+                ))}
               </div>
-            )}
-            <button onClick={pay} disabled={!method}
-              style={{ width:"100%",padding:14,background:method?"#00A868":"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:method?"pointer":"not-allowed" }}>
-              {method==="pix"?"Gerar QR Code":method==="cash"?"Confirmar":"Processar na Maquininha"}
-            </button>
-          </>)}
-          {step === "processing" && (
-            <div style={{ textAlign:"center",padding:"16px 0" }}>
-              <div style={{ fontSize:50,marginBottom:14 }}>💳</div>
-              <p style={{ fontSize:17,fontWeight:700,color:C.dark,margin:"0 0 6px" }}>Registrando pedido…</p>
-              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px" }}>Aguarde um momento</p>
-              <div style={{ background:"#EEE",borderRadius:8,height:8,overflow:"hidden" }}>
-                <div style={{ height:"100%",width:`${progress}%`,background:"#00A868",borderRadius:8,transition:"width 0.2s" }} />
+
+              {method === "credit" && (
+                <div style={{ background:"#F8F8F8",borderRadius:10,padding:"12px 14px",marginBottom:14 }}>
+                  <p style={{ fontSize:12,fontWeight:700,color:C.gray,margin:"0 0 8px" }}>Parcelas (taxa 2,99% a.m.)</p>
+                  <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
+                    {[1,2,3,4,6,10,12].map(n => (
+                      <button key={n} onClick={() => setInstallments(n)}
+                        style={{ padding:"6px 12px",borderRadius:7,border:`1.5px solid ${installments===n?"#00A868":"#DDD"}`,background:installments===n?"#F0FBF5":"#fff",cursor:"pointer",fontSize:12,fontWeight:700,color:installments===n?"#00A868":C.dark }}>
+                        {n}x
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ margin:"8px 0 0",fontSize:12,color:C.gray }}>
+                    {installments}x de <strong style={{ color:C.dark }}>R$ {installmentVal.toFixed(2).replace(".",",")}</strong>
+                    {installments>1 && <span style={{ color:C.gray }}> · Total: R$ {finalTotal.toFixed(2).replace(".",",")}</span>}
+                  </p>
+                </div>
+              )}
+
+              {method === "pix" && (
+                <div style={{ background:"#F0FBF5",border:"1px solid #B0EED2",borderRadius:10,padding:"12px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:12 }}>
+                  <span style={{ fontSize:28 }}>⚡</span>
+                  <div>
+                    <p style={{ margin:0,fontWeight:700,fontSize:13,color:"#007A4D" }}>Pagamento via PIX</p>
+                    <p style={{ margin:0,fontSize:12,color:C.gray }}>QR Code gerado na maquininha Stone. Cliente escaneia e paga.</p>
+                  </div>
+                </div>
+              )}
+
+              {method === "cash" && (
+                <div style={{ background:"#FFFBF0",border:"1px solid #F5E6B0",borderRadius:10,padding:"12px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:12 }}>
+                  <span style={{ fontSize:28 }}>💵</span>
+                  <div>
+                    <p style={{ margin:0,fontWeight:700,fontSize:13,color:"#7A6000" }}>Pagamento em Dinheiro</p>
+                    <p style={{ margin:0,fontSize:12,color:C.gray }}>Operador confirma recebimento e libera o pedido.</p>
+                  </div>
+                </div>
+              )}
+
+              <button onClick={irParaMaquininha} disabled={!method}
+                style={{ width:"100%",padding:14,background:method?"#00A868":"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:method?"pointer":"not-allowed",transition:"background 0.2s" }}>
+                {!method ? "Selecione uma forma de pagamento" :
+                 method==="pix" ? "⚡ Gerar QR Code PIX" :
+                 method==="cash" ? "💵 Confirmar Dinheiro" :
+                 "💳 Apresentar na Maquininha"}
+              </button>
+            </>
+          )}
+
+          {/* ── STEP: AWAITING MACHINE (débito/crédito) ────────── */}
+          {step === "awaiting_machine" && (
+            <div style={{ textAlign:"center",padding:"8px 0" }}>
+              <div style={{ fontSize:60,marginBottom:12,animation:"spin 2s linear infinite" }}>💳</div>
+              <style>{`@keyframes spin{0%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}100%{transform:rotate(-10deg)}}`}</style>
+              <p style={{ fontSize:20,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Aguardando Maquininha</p>
+              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px",lineHeight:1.7 }}>
+                Passe o cartão na maquininha Stone.<br/>
+                Após a <strong style={{color:C.dark}}>aprovação</strong> aparecer no visor,<br/>confirme abaixo para liberar o pedido.
+              </p>
+
+              <div style={{ background:"#F9F6F1",borderRadius:12,padding:"14px 16px",marginBottom:20,textAlign:"left" }}>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Cliente</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{nomeCliente}</span>
+                </div>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Mesa/Local</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{mesa}</span>
+                </div>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Forma</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{selMethod?.label}</span>
+                </div>
+                {method==="credit"&&installments>1 && (
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
+                    <span style={{ fontSize:12,color:C.gray }}>Parcelas</span>
+                    <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{installments}x de R$ {installmentVal.toFixed(2).replace(".",",")}</span>
+                  </div>
+                )}
+                <div style={{ display:"flex",justifyContent:"space-between",paddingTop:8,borderTop:"1px solid #EAE4DA" }}>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>Total cobrado</span>
+                  <span style={{ fontSize:17,fontWeight:800,color:"#00A868" }}>R$ {finalTotal.toFixed(2).replace(".",",")}</span>
+                </div>
               </div>
-              <p style={{ fontSize:12,color:C.gray,marginTop:8 }}>{Math.round(progress)}%</p>
+
+              <button onClick={salvarPedidoPago}
+                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
+                ✅ Aprovado na maquininha — Liberar pedido
+              </button>
+              <button onClick={()=>setStep("method")}
+                style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
+                ← Voltar (pagamento não realizado)
+              </button>
             </div>
           )}
 
-          {step === "awaiting" && (
-            <div style={{ textAlign:"center",padding:"16px 0" }}>
-              <div style={{ fontSize:56,marginBottom:14 }}>🔄</div>
-              <p style={{ fontSize:20,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Pedido registrado!</p>
-              <p style={{ fontSize:14,color:C.gray,margin:"0 0 18px",lineHeight:1.6 }}>
-                Apresente o cartão ou efetue o pagamento na maquininha Stone.<br/>
-                Após o pagamento ser aprovado na maquininha, clique no botão abaixo.
-              </p>
-              <div style={{ background:"#F9F6F1",borderRadius:12,padding:"14px",marginBottom:20,textAlign:"left" }}>
-                <p style={{ fontSize:11,color:C.gray,margin:"0 0 4px",textTransform:"uppercase",letterSpacing:1 }}>Resumo</p>
-                <p style={{ fontSize:16,fontWeight:700,color:C.dark,margin:"0 0 2px" }}>{nomeCliente || "Cliente"} · {mesa || "-"}</p>
-                <p style={{ fontSize:15,fontWeight:800,color:"#00A868",margin:0 }}>{selMethod?.label} · R$ {total.toFixed(2).replace(".",",")}</p>
-                {method==="credit"&&installments>1&&<p style={{ fontSize:12,color:C.gray,margin:"4px 0 0" }}>{installments}x de R$ {installmentVal.toFixed(2).replace(".",",")}</p>}
+          {/* ── STEP: PIX QR ──────────────────────────────────── */}
+          {step === "pix_qr" && (
+            <div style={{ textAlign:"center",padding:"8px 0" }}>
+              <p style={{ fontSize:19,fontWeight:800,color:C.dark,margin:"0 0 4px",fontFamily:"Georgia,serif" }}>PIX — QR Code</p>
+              <p style={{ fontSize:12,color:C.gray,margin:"0 0 18px" }}>Mostre o QR Code da maquininha Stone para o cliente escanear</p>
+
+              {/* QR Code simulado — na integração real viria do SDK Stone */}
+              <div style={{ background:"#F0FBF5",border:"2px dashed #00A868",borderRadius:14,padding:20,marginBottom:16,display:"inline-block" }}>
+                <div style={{ width:140,height:140,background:"#fff",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",margin:"0 auto",boxShadow:"0 2px 8px rgba(0,0,0,0.1)" }}>
+                  <span style={{ fontSize:60 }}>⚡</span>
+                  <span style={{ fontSize:9,color:C.gray,fontFamily:"monospace",marginTop:4,wordBreak:"break-all",padding:"0 4px",lineHeight:1.3 }}>{pixCode.slice(0,16)}</span>
+                </div>
+                <p style={{ fontSize:11,color:"#007A4D",margin:"10px 0 0",fontWeight:700 }}>Escaneie na maquininha Stone</p>
               </div>
-              <button onClick={confirmarPagamento}
-                style={{ width:"100%",padding:14,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:8 }}>
-                ✅ Pagamento confirmado na maquininha
+
+              <div style={{ background:"#F9F6F1",borderRadius:10,padding:"10px 14px",marginBottom:16,textAlign:"left" }}>
+                <div style={{ display:"flex",justifyContent:"space-between" }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Valor PIX</span>
+                  <span style={{ fontSize:16,fontWeight:800,color:"#00A868" }}>R$ {total.toFixed(2).replace(".",",")}</span>
+                </div>
+                <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Para</span>
+                  <span style={{ fontSize:12,fontWeight:700,color:C.dark }}>{nomeCliente} · {mesa}</span>
+                </div>
+              </div>
+
+              <p style={{ fontSize:12,color:C.gray,margin:"0 0 14px",lineHeight:1.6 }}>
+                Após o cliente efetuar o pagamento e a <strong style={{color:C.dark}}>confirmação</strong> aparecer na maquininha, clique abaixo para liberar o pedido.
+              </p>
+
+              <button onClick={salvarPedidoPago}
+                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
+                ✅ PIX recebido — Liberar pedido
+              </button>
+              <button onClick={()=>setStep("method")}
+                style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
+                ← Voltar (pagamento não realizado)
+              </button>
+            </div>
+          )}
+
+          {/* ── STEP: CASH CONFIRM ────────────────────────────── */}
+          {step === "cash_confirm" && (
+            <div style={{ textAlign:"center",padding:"8px 0" }}>
+              <div style={{ fontSize:56,marginBottom:12 }}>💵</div>
+              <p style={{ fontSize:19,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Pagamento em Dinheiro</p>
+              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px",lineHeight:1.6 }}>Confirme o recebimento do valor abaixo para liberar o pedido no sistema.</p>
+
+              <div style={{ background:"#FFFBF0",border:"1.5px solid #F5E6B0",borderRadius:12,padding:"18px 16px",marginBottom:20 }}>
+                <div style={{ fontSize:12,color:"#7A6000",marginBottom:4 }}>Valor a receber</div>
+                <div style={{ fontSize:34,fontWeight:800,color:"#7A4500" }}>R$ {total.toFixed(2).replace(".",",")}</div>
+                <div style={{ fontSize:12,color:C.gray,marginTop:6 }}>{nomeCliente} · {mesa}</div>
+              </div>
+
+              <button onClick={salvarPedidoPago}
+                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
+                ✅ Dinheiro recebido — Liberar pedido
+              </button>
+              <button onClick={()=>setStep("method")}
+                style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
+                ← Voltar
+              </button>
+            </div>
+          )}
+
+          {/* ── STEP: SAVING ──────────────────────────────────── */}
+          {step === "saving" && (
+            <div style={{ textAlign:"center",padding:"32px 0" }}>
+              <div style={{ fontSize:44,marginBottom:16 }}>⏳</div>
+              <p style={{ fontSize:16,fontWeight:700,color:C.dark,margin:"0 0 6px" }}>Registrando pedido…</p>
+              <p style={{ fontSize:13,color:C.gray }}>Salvando no sistema, aguarde</p>
+            </div>
+          )}
+
+          {/* ── STEP: SUCCESS ─────────────────────────────────── */}
+          {step === "success" && (
+            <div style={{ textAlign:"center",padding:"8px 0" }}>
+              <div style={{ width:72,height:72,borderRadius:"50%",background:"#00A868",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px" }}>✅</div>
+              <p style={{ fontSize:21,fontWeight:800,color:"#00A868",margin:"0 0 4px",fontFamily:"Georgia,serif" }}>Pedido confirmado!</p>
+              <p style={{ fontSize:14,color:C.gray,margin:"0 0 20px" }}>Pagamento aprovado · {selMethod?.label}</p>
+
+              <div style={{ background:"#F0FBF5",borderRadius:12,padding:"14px 16px",marginBottom:20,textAlign:"left" }}>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Cliente</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{nomeCliente}</span>
+                </div>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Mesa/Local</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{mesa}</span>
+                </div>
+                <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
+                  <span style={{ fontSize:12,color:C.gray }}>Valor pago</span>
+                  <span style={{ fontSize:15,fontWeight:800,color:"#00A868" }}>R$ {finalTotal.toFixed(2).replace(".",",")}</span>
+                </div>
+                {method==="credit"&&installments>1 && (
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
+                    <span style={{ fontSize:12,color:C.gray }}>Parcelas</span>
+                    <span style={{ fontSize:12,fontWeight:700,color:C.dark }}>{installments}x de R$ {installmentVal.toFixed(2).replace(".",",")}</span>
+                  </div>
+                )}
+                <div style={{ display:"flex",justifyContent:"space-between",paddingTop:8,borderTop:"1px solid #B0EED2" }}>
+                  <span style={{ fontSize:11,color:C.gray }}>NSU</span>
+                  <span style={{ fontSize:11,fontFamily:"monospace",color:C.gray }}>{nsu}</span>
+                </div>
+              </div>
+
+              <button onClick={onSuccess} style={{ width:"100%",padding:13,background:C.red,color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer" }}>
+                🍕 Novo pedido
+              </button>
+            </div>
+          )}
+
+          {/* ── STEP: ERROR ───────────────────────────────────── */}
+          {step === "error" && (
+            <div style={{ textAlign:"center",padding:"16px 0" }}>
+              <div style={{ fontSize:52,marginBottom:12 }}>⚠️</div>
+              <p style={{ fontSize:18,fontWeight:800,color:"#C8181A",margin:"0 0 8px" }}>Erro ao registrar pedido</p>
+              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px" }}>{saveError}</p>
+              <p style={{ fontSize:12,color:C.gray,background:"#FFF0F0",borderRadius:9,padding:12,marginBottom:20 }}>
+                O pagamento foi realizado mas houve falha ao salvar. Anote o NSU <strong>{nsu}</strong> e registre manualmente se necessário.
+              </p>
+              <button onClick={salvarPedidoPago}
+                style={{ width:"100%",padding:13,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8 }}>
+                🔄 Tentar novamente
               </button>
               <button onClick={onClose}
                 style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
-                Cancelar pedido
+                Fechar
               </button>
             </div>
           )}
 
-          {step === "success" && (
-            <div style={{ textAlign:"center",padding:"16px 0" }}>
-              <div style={{ fontSize:50,marginBottom:14 }}>✅</div>
-              <p style={{ fontSize:20,fontWeight:800,color:"#00A868",margin:"0 0 6px" }}>Pagamento aprovado!</p>
-              <p style={{ fontSize:14,color:C.gray,margin:"0 0 4px" }}>{selMethod?.label} · R$ {total.toFixed(2).replace(".",",")}</p>
-              {method==="credit"&&installments>1&&<p style={{ fontSize:12,color:C.gray,margin:"0 0 20px" }}>{installments}x de R$ {installmentVal.toFixed(2).replace(".",",")}</p>}
-              <div style={{ background:"#F0FBF5",borderRadius:10,padding:12,marginBottom:16 }}>
-                <p style={{ fontSize:11,color:C.gray,fontFamily:"monospace",margin:0 }}>NSU: {Math.floor(Math.random()*9e6)+1e6} · {new Date().toLocaleString("pt-BR")}</p>
-              </div>
-              <button onClick={onSuccess} style={{ width:"100%",padding:13,background:C.red,color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer" }}>
-                Fechar & Novo Pedido
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
