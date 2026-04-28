@@ -150,10 +150,13 @@ const DRINKS = [
 
 // ─── STONE PAYMENT ────────────────────────────────────────────────────────────
 function StoneModal({ cart, total, onClose, onSuccess }) {
-  const [step, setStep] = useState("method");
+  const [step, setStep] = useState("identify");
+  const [nomeCliente, setNomeCliente] = useState("");
+  const [mesa, setMesa] = useState("");
   const [method, setMethod] = useState(null);
   const [installments, setInstallments] = useState(1);
   const [progress, setProgress] = useState(0);
+  const [saveError, setSaveError] = useState(false);
 
   const methods = [
     { id: "debit", label: "Débito", icon: "💳" },
@@ -167,27 +170,48 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
   const finalTotal = total * (1 + fee);
   const installmentVal = method === "credit" ? finalTotal / installments : finalTotal;
 
-  function pay() {
+  async function pay() {
     setStep("processing");
+    setSaveError(false);
     let p = 0;
     const t = setInterval(() => {
       p += Math.random() * 15 + 6;
-      if (p >= 100) {
-        p = 100;
-        clearInterval(t);
-        setTimeout(async () => {
-          const { error } = await supabase.from("pedidos").insert([{
-            itens: cart,
-            total: total,
-            metodo_pagamento: method,
-            status: "pago"
-          }]);
-          if (error) console.error("Erro ao salvar pedido:", error);
-          setStep("success");
-        }, 300);
-      }
+      if (p >= 100) { p = 100; clearInterval(t); }
       setProgress(Math.min(p, 100));
     }, 200);
+
+    // Salva o pedido como "aguardando_pagamento" antes de mostrar sucesso
+    const { error } = await supabase.from("pedidos").insert([{
+      itens: cart,
+      total: total,
+      metodo_pagamento: method,
+      nome_cliente: nomeCliente.trim() || "Cliente",
+      mesa: mesa.trim() || "-",
+      status: "aguardando_pagamento"
+    }]);
+
+    clearInterval(t);
+    setProgress(100);
+
+    if (error) {
+      console.error("Erro ao salvar pedido:", error);
+      setSaveError(true);
+      setStep("method");
+      return;
+    }
+
+    setTimeout(() => setStep("awaiting"), 300);
+  }
+
+  async function confirmarPagamento() {
+    // Atualiza status para "pago" — chamado quando o operador confirma na maquininha
+    await supabase.from("pedidos")
+      .update({ status: "pago" })
+      .eq("nome_cliente", nomeCliente.trim() || "Cliente")
+      .eq("status", "aguardando_pagamento")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    setStep("success");
   }
 
   const selMethod = methods.find(m => m.id === method);
@@ -201,11 +225,46 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
           <button onClick={onClose} style={{ marginLeft:"auto",background:"none",border:"none",color:"#fff",fontSize:22,cursor:"pointer" }}>×</button>
         </div>
         <div style={{ padding:"22px 22px 26px",fontFamily:"sans-serif" }}>
+          {step === "identify" && (
+            <div>
+              <p style={{ fontWeight:700,fontSize:16,color:C.dark,margin:"0 0 4px",fontFamily:"Georgia,serif" }}>Identificação</p>
+              <p style={{ fontSize:12,color:C.gray,margin:"0 0 18px" }}>Informe os dados antes de pagar</p>
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Nome do Cliente</label>
+                <input
+                  placeholder="Ex: João Silva"
+                  value={nomeCliente}
+                  onChange={e => setNomeCliente(e.target.value)}
+                  style={{ width:"100%",padding:"10px 13px",border:"1.5px solid #DDD",borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif" }}
+                />
+              </div>
+              <div style={{ marginBottom:22 }}>
+                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Mesa / Identificação</label>
+                <input
+                  placeholder="Ex: Mesa 5 ou Delivery"
+                  value={mesa}
+                  onChange={e => setMesa(e.target.value)}
+                  style={{ width:"100%",padding:"10px 13px",border:"1.5px solid #DDD",borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif" }}
+                />
+              </div>
+              <div style={{ background:"#F9F6F1",borderRadius:10,padding:"12px 14px",marginBottom:18 }}>
+                <p style={{ fontSize:12,color:C.gray,margin:"0 0 4px" }}>Total do pedido</p>
+                <p style={{ fontSize:24,fontWeight:800,color:C.dark,margin:0,fontFamily:"sans-serif" }}>R$ {total.toFixed(2).replace(".",",")}</p>
+              </div>
+              <button
+                onClick={() => setStep("method")}
+                style={{ width:"100%",padding:13,background:C.red,color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer" }}>
+                Continuar para Pagamento →
+              </button>
+            </div>
+          )}
+
           {step === "method" && (<>
             <div style={{ textAlign:"center",marginBottom:18 }}>
               <p style={{ color:C.gray,fontSize:12,margin:"0 0 4px",textTransform:"uppercase",letterSpacing:1 }}>Total do pedido</p>
               <p style={{ fontSize:30,fontWeight:800,color:C.dark,margin:0 }}>R$ {total.toFixed(2).replace(".",",")}</p>
             </div>
+            {saveError && <div style={{ background:"#FFF0F0",border:"1px solid #FFAAAA",borderRadius:9,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#C00",fontFamily:"sans-serif" }}>⚠️ Erro ao registrar pedido. Tente novamente.</div>}
             <p style={{ fontSize:11,fontWeight:700,color:C.gray,textTransform:"uppercase",letterSpacing:1,margin:"0 0 10px" }}>Forma de pagamento</p>
             <div style={{ display:"flex",flexDirection:"column",gap:7,marginBottom:14 }}>
               {methods.map(m => (
@@ -248,14 +307,40 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
           {step === "processing" && (
             <div style={{ textAlign:"center",padding:"16px 0" }}>
               <div style={{ fontSize:50,marginBottom:14 }}>💳</div>
-              <p style={{ fontSize:17,fontWeight:700,color:C.dark,margin:"0 0 6px" }}>Processando pagamento</p>
-              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px" }}>Comunicando com a Stone…</p>
+              <p style={{ fontSize:17,fontWeight:700,color:C.dark,margin:"0 0 6px" }}>Registrando pedido…</p>
+              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px" }}>Aguarde um momento</p>
               <div style={{ background:"#EEE",borderRadius:8,height:8,overflow:"hidden" }}>
                 <div style={{ height:"100%",width:`${progress}%`,background:"#00A868",borderRadius:8,transition:"width 0.2s" }} />
               </div>
               <p style={{ fontSize:12,color:C.gray,marginTop:8 }}>{Math.round(progress)}%</p>
             </div>
           )}
+
+          {step === "awaiting" && (
+            <div style={{ textAlign:"center",padding:"16px 0" }}>
+              <div style={{ fontSize:56,marginBottom:14 }}>🔄</div>
+              <p style={{ fontSize:20,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Pedido registrado!</p>
+              <p style={{ fontSize:14,color:C.gray,margin:"0 0 18px",lineHeight:1.6 }}>
+                Apresente o cartão ou efetue o pagamento na maquininha Stone.<br/>
+                Após o pagamento ser aprovado na maquininha, clique no botão abaixo.
+              </p>
+              <div style={{ background:"#F9F6F1",borderRadius:12,padding:"14px",marginBottom:20,textAlign:"left" }}>
+                <p style={{ fontSize:11,color:C.gray,margin:"0 0 4px",textTransform:"uppercase",letterSpacing:1 }}>Resumo</p>
+                <p style={{ fontSize:16,fontWeight:700,color:C.dark,margin:"0 0 2px" }}>{nomeCliente || "Cliente"} · {mesa || "-"}</p>
+                <p style={{ fontSize:15,fontWeight:800,color:"#00A868",margin:0 }}>{selMethod?.label} · R$ {total.toFixed(2).replace(".",",")}</p>
+                {method==="credit"&&installments>1&&<p style={{ fontSize:12,color:C.gray,margin:"4px 0 0" }}>{installments}x de R$ {installmentVal.toFixed(2).replace(".",",")}</p>}
+              </div>
+              <button onClick={confirmarPagamento}
+                style={{ width:"100%",padding:14,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:8 }}>
+                ✅ Pagamento confirmado na maquininha
+              </button>
+              <button onClick={onClose}
+                style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
+                Cancelar pedido
+              </button>
+            </div>
+          )}
+
           {step === "success" && (
             <div style={{ textAlign:"center",padding:"16px 0" }}>
               <div style={{ fontSize:50,marginBottom:14 }}>✅</div>
