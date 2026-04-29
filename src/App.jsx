@@ -156,7 +156,7 @@ const DRINKS = [
 function StoneModal({ cart, total, onClose, onSuccess }) {
   const [step, setStep] = useState("identify"); // identify | method | awaiting_machine | pix_qr | cash_confirm | saving | success | error
   const [nomeCliente, setNomeCliente] = useState("");
-  const [telefone, setTelefone] = useState("");
+  const [mesa, setMesa] = useState("");
   const [method, setMethod] = useState(null);
   const [installments, setInstallments] = useState(1);
   const [saveError, setSaveError] = useState("");
@@ -168,11 +168,10 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
   });
 
   const methods = [
-    { id: "debit",   label: "Débito",            icon: "💳", desc: "Cartão de débito na maquininha" },
-    { id: "credit1x",label: "Crédito à Vista",   icon: "💳", desc: "Crédito sem parcelamento" },
-    { id: "credit",  label: "Crédito Parcelado",  icon: "💳", desc: "Parcelamento disponível" },
-    { id: "pix",     label: "PIX",                icon: "⚡", desc: "QR Code na maquininha Stone" },
-    { id: "cash",    label: "Dinheiro",           icon: "💵", desc: "Pagamento em espécie" },
+    { id: "debit",    label: "Débito",          icon: "💳", desc: "Cartão de débito na maquininha" },
+    { id: "credit1x", label: "Crédito à Vista", icon: "💳", desc: "Crédito sem parcelamento" },
+    { id: "pix",      label: "PIX",             icon: "⚡", desc: "QR Code na maquininha Stone" },
+    { id: "cash",     label: "Dinheiro",        icon: "💵", desc: "Pague na retirada do pedido" },
   ];
 
   const fee = method === "credit" ? 0.0299 : 0;
@@ -183,11 +182,33 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
   // Redireciona para a tela correta de acordo com o método
   function irParaMaquininha() {
     if (method === "pix") setStep("pix_qr");
-    else if (method === "cash") setStep("cash_confirm");
+    else if (method === "cash") salvarPedidoDinheiro(); // dinheiro: vai direto sem maquininha
     else setStep("awaiting_machine"); // débito ou crédito
   }
 
-  // Salva o pedido no Supabase como "pago" — chamado SOMENTE após confirmação real
+  // Dinheiro: salva como "aguardando_pagamento" (paga na retirada) e vai direto para produção
+  async function salvarPedidoDinheiro() {
+    setStep("saving");
+    setSaveError("");
+    const { error } = await supabase.from("pedidos").insert([{
+      itens: cart,
+      total,
+      metodo_pagamento: "cash",
+      parcelas: null,
+      nome_cliente: nomeCliente.trim() || "Cliente",
+      telefone: telefone.trim() || "-",
+      status: "aguardando_pagamento",
+      nsu,
+    }]);
+    if (error) {
+      setSaveError("Erro ao registrar pedido no sistema. Tente novamente.");
+      setStep("error");
+      return;
+    }
+    setStep("success");
+  }
+
+  // Cartão/PIX: salva como "pago" SOMENTE após confirmação na maquininha
   async function salvarPedidoPago() {
     setStep("saving");
     setSaveError("");
@@ -195,7 +216,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
       itens: cart,
       total: finalTotal,
       metodo_pagamento: method,
-      parcelas: method === "credit" ? installments : null,
+      parcelas: null,
       nome_cliente: nomeCliente.trim() || "Cliente",
       telefone: telefone.trim() || "-",
       status: "pago",
@@ -242,13 +263,12 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                 />
               </div>
               <div style={{ marginBottom:20 }}>
-                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Telefone / WhatsApp *</label>
+                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Mesa / Identificação *</label>
                 <input
-                  placeholder="Ex: (48) 9 9999-9999"
-                  value={telefone}
-                  onChange={e => setTelefone(e.target.value)}
-                  type="tel"
-                  style={{ width:"100%",padding:"10px 13px",border:`1.5px solid ${telefone?"#00A868":"#DDD"}`,borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif",transition:"border-color 0.2s" }}
+                  placeholder="Ex: Mesa 5, Balcão, Delivery…"
+                  value={mesa}
+                  onChange={e => setMesa(e.target.value)}
+                  style={{ width:"100%",padding:"10px 13px",border:`1.5px solid ${mesa?"#00A868":"#DDD"}`,borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif",transition:"border-color 0.2s" }}
                 />
               </div>
 
@@ -269,8 +289,8 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
 
               <button
                 onClick={() => setStep("method")}
-                disabled={!nomeCliente.trim() || !telefone.trim()}
-                style={{ width:"100%",padding:13,background:nomeCliente.trim()&&telefone.trim()?C.red:"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:nomeCliente.trim()&&telefone.trim()?"pointer":"not-allowed",transition:"background 0.2s" }}>
+                disabled={!nomeCliente.trim() || !mesa.trim()}
+                style={{ width:"100%",padding:13,background:nomeCliente.trim()&&mesa.trim()?C.red:"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:nomeCliente.trim()&&mesa.trim()?"pointer":"not-allowed",transition:"background 0.2s" }}>
                 Continuar para Pagamento →
               </button>
             </div>
@@ -282,7 +302,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
               <div style={{ display:"flex",alignItems:"center",marginBottom:18,gap:10 }}>
                 <button onClick={()=>setStep("identify")} style={{ background:"none",border:"1px solid #DDD",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,color:C.gray }}>← Voltar</button>
                 <div>
-                  <p style={{ margin:0,fontWeight:700,color:C.dark,fontSize:14 }}>{nomeCliente} · {telefone}</p>
+                  <p style={{ margin:0,fontWeight:700,color:C.dark,fontSize:14 }}>{nomeCliente} · {mesa}</p>
                   <p style={{ margin:0,fontSize:22,fontWeight:800,color:"#00A868" }}>R$ {total.toFixed(2).replace(".",",")}</p>
                 </div>
               </div>
@@ -303,24 +323,6 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                   </button>
                 ))}
               </div>
-
-              {method === "credit" && (
-                <div style={{ background:"#F8F8F8",borderRadius:10,padding:"12px 14px",marginBottom:14 }}>
-                  <p style={{ fontSize:12,fontWeight:700,color:C.gray,margin:"0 0 8px" }}>Parcelas (taxa 2,99% a.m.)</p>
-                  <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
-                    {[1,2,3,4,6,10,12].map(n => (
-                      <button key={n} onClick={() => setInstallments(n)}
-                        style={{ padding:"6px 12px",borderRadius:7,border:`1.5px solid ${installments===n?"#00A868":"#DDD"}`,background:installments===n?"#F0FBF5":"#fff",cursor:"pointer",fontSize:12,fontWeight:700,color:installments===n?"#00A868":C.dark }}>
-                        {n}x
-                      </button>
-                    ))}
-                  </div>
-                  <p style={{ margin:"8px 0 0",fontSize:12,color:C.gray }}>
-                    {installments}x de <strong style={{ color:C.dark }}>R$ {installmentVal.toFixed(2).replace(".",",")}</strong>
-                    {installments>1 && <span style={{ color:C.gray }}> · Total: R$ {finalTotal.toFixed(2).replace(".",",")}</span>}
-                  </p>
-                </div>
-              )}
 
               {method === "pix" && (
                 <div style={{ background:"#F0FBF5",border:"1px solid #B0EED2",borderRadius:10,padding:"12px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:12 }}>
@@ -369,8 +371,8 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                   <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{nomeCliente}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
-                  <span style={{ fontSize:12,color:C.gray }}>Telefone</span>
-                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{telefone}</span>
+                  <span style={{ fontSize:12,color:C.gray }}>Mesa/Local</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{mesa}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
                   <span style={{ fontSize:12,color:C.gray }}>Forma</span>
@@ -421,7 +423,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}>
                   <span style={{ fontSize:12,color:C.gray }}>Para</span>
-                  <span style={{ fontSize:12,fontWeight:700,color:C.dark }}>{nomeCliente} · {telefone}</span>
+                  <span style={{ fontSize:12,fontWeight:700,color:C.dark }}>{nomeCliente} · {mesa}</span>
                 </div>
               </div>
 
@@ -440,30 +442,6 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* ── STEP: CASH CONFIRM ────────────────────────────── */}
-          {step === "cash_confirm" && (
-            <div style={{ textAlign:"center",padding:"8px 0" }}>
-              <div style={{ fontSize:56,marginBottom:12 }}>💵</div>
-              <p style={{ fontSize:19,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Pagamento em Dinheiro</p>
-              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px",lineHeight:1.6 }}>Confirme o recebimento do valor abaixo para liberar o pedido no sistema.</p>
-
-              <div style={{ background:"#FFFBF0",border:"1.5px solid #F5E6B0",borderRadius:12,padding:"18px 16px",marginBottom:20 }}>
-                <div style={{ fontSize:12,color:"#7A6000",marginBottom:4 }}>Valor a receber</div>
-                <div style={{ fontSize:34,fontWeight:800,color:"#7A4500" }}>R$ {total.toFixed(2).replace(".",",")}</div>
-                <div style={{ fontSize:12,color:C.gray,marginTop:6 }}>{nomeCliente} · {telefone}</div>
-              </div>
-
-              <button onClick={salvarPedidoPago}
-                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
-                ✅ Dinheiro recebido — Liberar pedido
-              </button>
-              <button onClick={()=>setStep("method")}
-                style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
-                ← Voltar
-              </button>
-            </div>
-          )}
-
           {/* ── STEP: SAVING ──────────────────────────────────── */}
           {step === "saving" && (
             <div style={{ textAlign:"center",padding:"32px 0" }}>
@@ -478,7 +456,9 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
             <div style={{ textAlign:"center",padding:"8px 0" }}>
               <div style={{ width:72,height:72,borderRadius:"50%",background:"#00A868",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px" }}>✅</div>
               <p style={{ fontSize:21,fontWeight:800,color:"#00A868",margin:"0 0 4px",fontFamily:"Georgia,serif" }}>Pedido confirmado!</p>
-              <p style={{ fontSize:14,color:C.gray,margin:"0 0 20px" }}>Pagamento aprovado · {selMethod?.label}</p>
+              <p style={{ fontSize:14,color:C.gray,margin:"0 0 20px" }}>
+                {method === "cash" ? "💵 Pagamento na retirada" : `Pagamento aprovado · ${selMethod?.label}`}
+              </p>
 
               <div style={{ background:"#F0FBF5",borderRadius:12,padding:"14px 16px",marginBottom:20,textAlign:"left" }}>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
@@ -486,8 +466,8 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                   <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{nomeCliente}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
-                  <span style={{ fontSize:12,color:C.gray }}>Telefone</span>
-                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{telefone}</span>
+                  <span style={{ fontSize:12,color:C.gray }}>Mesa/Local</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{mesa}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
                   <span style={{ fontSize:12,color:C.gray }}>Valor pago</span>
@@ -648,8 +628,8 @@ function CartSidebar({ cart, onRemove, onClear, onCheckout, onClose }) {
               <span style={{ fontSize:16,fontWeight:700,color:C.dark }}>Total</span>
               <span style={{ fontSize:22,fontWeight:800,color:C.red }}>R$ {total.toFixed(2).replace(".",",")}</span>
             </div>
-            <button onClick={onCheckout} style={{ width:"100%",padding:13,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8 }}>
-              <span>💳</span> Pagar com Stone
+            <button onClick={onCheckout} style={{ width:"100%",padding:13,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"sans-serif" }}>
+              PAGAR
             </button>
             <button onClick={onClear} style={{ width:"100%",marginTop:7,padding:9,background:"none",border:`1px solid #DDD`,borderRadius:8,fontSize:12,color:C.gray,cursor:"pointer",fontFamily:"sans-serif" }}>
               Limpar carrinho
