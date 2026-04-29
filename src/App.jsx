@@ -156,7 +156,7 @@ const DRINKS = [
 function StoneModal({ cart, total, onClose, onSuccess }) {
   const [step, setStep] = useState("identify"); // identify | method | awaiting_machine | pix_qr | cash_confirm | saving | success | error
   const [nomeCliente, setNomeCliente] = useState("");
-  const [mesa, setMesa] = useState("");
+  const [telefone, setTelefone] = useState("");
   const [method, setMethod] = useState(null);
   const [installments, setInstallments] = useState(1);
   const [saveError, setSaveError] = useState("");
@@ -263,12 +263,13 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                 />
               </div>
               <div style={{ marginBottom:20 }}>
-                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Mesa / Identificação *</label>
+                <label style={{ fontSize:11,fontWeight:700,color:C.gray,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1 }}>Telefone / WhatsApp *</label>
                 <input
-                  placeholder="Ex: Mesa 5, Balcão, Delivery…"
-                  value={mesa}
-                  onChange={e => setMesa(e.target.value)}
-                  style={{ width:"100%",padding:"10px 13px",border:`1.5px solid ${mesa?"#00A868":"#DDD"}`,borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif",transition:"border-color 0.2s" }}
+                  placeholder="Ex: (48) 9 9999-9999"
+                  value={telefone}
+                  onChange={e => setTelefone(e.target.value)}
+                  type="tel"
+                  style={{ width:"100%",padding:"10px 13px",border:`1.5px solid ${telefone?"#00A868":"#DDD"}`,borderRadius:9,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"sans-serif",transition:"border-color 0.2s" }}
                 />
               </div>
 
@@ -289,8 +290,8 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
 
               <button
                 onClick={() => setStep("method")}
-                disabled={!nomeCliente.trim() || !mesa.trim()}
-                style={{ width:"100%",padding:13,background:nomeCliente.trim()&&mesa.trim()?C.red:"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:nomeCliente.trim()&&mesa.trim()?"pointer":"not-allowed",transition:"background 0.2s" }}>
+                disabled={!nomeCliente.trim() || !telefone.trim()}
+                style={{ width:"100%",padding:13,background:nomeCliente.trim()&&telefone.trim()?C.red:"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:nomeCliente.trim()&&telefone.trim()?"pointer":"not-allowed",transition:"background 0.2s" }}>
                 Continuar para Pagamento →
               </button>
             </div>
@@ -302,7 +303,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
               <div style={{ display:"flex",alignItems:"center",marginBottom:18,gap:10 }}>
                 <button onClick={()=>setStep("identify")} style={{ background:"none",border:"1px solid #DDD",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,color:C.gray }}>← Voltar</button>
                 <div>
-                  <p style={{ margin:0,fontWeight:700,color:C.dark,fontSize:14 }}>{nomeCliente} · {mesa}</p>
+                  <p style={{ margin:0,fontWeight:700,color:C.dark,fontSize:14 }}>{nomeCliente} · {telefone}</p>
                   <p style={{ margin:0,fontSize:22,fontWeight:800,color:"#00A868" }}>R$ {total.toFixed(2).replace(".",",")}</p>
                 </div>
               </div>
@@ -371,8 +372,8 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                   <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{nomeCliente}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
-                  <span style={{ fontSize:12,color:C.gray }}>Mesa/Local</span>
-                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{mesa}</span>
+                  <span style={{ fontSize:12,color:C.gray }}>Telefone</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{telefone}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
                   <span style={{ fontSize:12,color:C.gray }}>Forma</span>
@@ -423,7 +424,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}>
                   <span style={{ fontSize:12,color:C.gray }}>Para</span>
-                  <span style={{ fontSize:12,fontWeight:700,color:C.dark }}>{nomeCliente} · {mesa}</span>
+                  <span style={{ fontSize:12,fontWeight:700,color:C.dark }}>{nomeCliente} · {telefone}</span>
                 </div>
               </div>
 
@@ -466,8 +467,8 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                   <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{nomeCliente}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
-                  <span style={{ fontSize:12,color:C.gray }}>Mesa/Local</span>
-                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{mesa}</span>
+                  <span style={{ fontSize:12,color:C.gray }}>Telefone</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>{telefone}</span>
                 </div>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:5 }}>
                   <span style={{ fontSize:12,color:C.gray }}>Valor pago</span>
