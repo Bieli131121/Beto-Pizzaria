@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -207,25 +207,6 @@ function StatusTimeline({ status }) {
   );
 }
 
-// ─── MODAL DE CONFIRMAÇÃO ──────────────────────────────────────────────────────
-function ConfirmModal({ mensagem, onConfirm, onCancel }) {
-  return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 360, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-        <div className="modal-title" style={{ fontSize: 18, marginBottom: 12 }}>{mensagem}</div>
-        <div className="form-actions" style={{ justifyContent: "center" }}>
-          <button className="btn-cancel" onClick={onCancel}>Cancelar</button>
-          <button className="btn-primary btn-save" onClick={onConfirm}
-            style={{ background: "linear-gradient(135deg,#e84242,#c0392b)" }}>
-            Confirmar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── PEDIDOS PAGE ──────────────────────────────────────────────────────────────
 function PedidosPage() {
   const [pedidos, setPedidos] = useState([]);
@@ -234,51 +215,42 @@ function PedidosPage() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [toast, setToastP] = useState("");
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null);
+  const [countdown, setCountdown] = useState(5);
   const [busca, setBusca] = useState("");
-  const [confirm, setConfirm] = useState(null); // { mensagem, onConfirm }
-  const intervalRef = useRef(null);
-  const pedidosRef = useRef([]);
 
   useEffect(() => {
-    fetchPedidos(true); // primeiro carregamento mostra loading
-    intervalRef.current = setInterval(() => fetchPedidos(false), 1000);
-    return () => clearInterval(intervalRef.current);
+    fetchPedidos();
+    const interval = setInterval(fetchPedidos, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  async function fetchPedidos(inicial = false) {
+  useEffect(() => {
+    if (!ultimaAtualizacao) return;
+    setCountdown(5);
+    const tick = setInterval(() => setCountdown(c => c <= 1 ? 5 : c - 1), 1000);
+    return () => clearInterval(tick);
+  }, [ultimaAtualizacao]);
+
+  async function fetchPedidos() {
     const { data } = await supabase.from("pedidos").select("*").order("created_at", { ascending: false });
-    const novos = data || [];
-    // Atualiza estado só se os dados mudaram (evita re-render desnecessário)
-    const mudou = JSON.stringify(novos.map(p => p.id + p.status + p.total)) !==
-                  JSON.stringify(pedidosRef.current.map(p => p.id + p.status + p.total));
-    if (mudou || inicial) {
-      pedidosRef.current = novos;
-      setPedidos(novos);
-    }
-    if (inicial) setLoading(false);
+    setPedidos(data || []);
+    setLoading(false);
     setUltimaAtualizacao(new Date());
   }
 
   function showToastP(msg) { setToastP(msg); setTimeout(() => setToastP(""), 3000); }
 
   async function atualizarStatus(id, novoStatus) {
-    const { error } = await supabase.from("pedidos").update({ status: novoStatus }).eq("id", id);
-    if (error) { showToastP("Erro ao atualizar status ✗"); return; }
+    await supabase.from("pedidos").update({ status: novoStatus }).eq("id", id);
     showToastP(`Status → ${statusCfg[novoStatus]?.label} ✓`);
-    await fetchPedidos(false);
+    fetchPedidos();
   }
 
-  function pedirConfirmacaoExcluir(id) {
-    setConfirm({
-      mensagem: "Excluir este pedido permanentemente?",
-      onConfirm: async () => {
-        setConfirm(null);
-        const { error } = await supabase.from("pedidos").delete().eq("id", id);
-        if (error) { showToastP("Erro ao excluir pedido ✗"); return; }
-        showToastP("Pedido excluído ✓");
-        await fetchPedidos(false);
-      }
-    });
+  async function excluirPedido(id) {
+    if (!confirm("Excluir pedido?")) return;
+    await supabase.from("pedidos").delete().eq("id", id);
+    showToastP("Pedido excluído");
+    fetchPedidos();
   }
 
   const totaisPorStatus = Object.keys(statusCfg).reduce((acc, s) => {
@@ -300,14 +272,7 @@ function PedidosPage() {
     <>
       <div className="page-header">
         <h2>Pedidos</h2>
-        <p>
-          Gerencie pedidos em tempo real
-          {ultimaAtualizacao && (
-            <span style={{ marginLeft: 12, fontSize: 12, color: "var(--success)", fontWeight: 600 }}>
-              ● atualizado às {ultimaAtualizacao.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-            </span>
-          )}
-        </p>
+        <p>Gerencie pedidos em tempo real</p>
       </div>
 
       {/* Cards resumo */}
@@ -347,9 +312,9 @@ function PedidosPage() {
             {cfg.label} ({totaisPorStatus[s] || 0})
           </button>
         ))}
-        <button onClick={() => fetchPedidos(false)}
-          style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
-          🔄
+        <button onClick={fetchPedidos}
+          style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
+          🔄 Atualizar
         </button>
       </div>
 
@@ -441,7 +406,7 @@ function PedidosPage() {
                           ✕ Cancelar
                         </button>
                       )}
-                      <button onClick={() => pedirConfirmacaoExcluir(pedido.id)}
+                      <button onClick={() => excluirPedido(pedido.id)}
                         style={{ marginLeft: "auto", padding: "9px 14px", borderRadius: 9, border: "1px solid var(--border)", background: "transparent", color: "var(--muted)", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
                         🗑️ Excluir
                       </button>
@@ -453,7 +418,6 @@ function PedidosPage() {
           })}
         </div>
       )}
-      {confirm && <ConfirmModal mensagem={confirm.mensagem} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -683,8 +647,6 @@ export default function PainelAdmin({ usuario, onLogout }) {
   const [toast, setToast] = useState("");
   const [form, setForm] = useState({ nome: "", descricao: "", preco: "", categoria: "Pizza", imagem_url: "", ativo: true });
 
-  const [confirmProduto, setConfirmProduto] = useState(null);
-
   useEffect(() => { fetchProdutos(); fetchPedidos(); }, []);
 
   async function fetchProdutos() {
@@ -726,17 +688,11 @@ export default function PainelAdmin({ usuario, onLogout }) {
     fetchProdutos();
   }
 
-  function excluir(id) {
-    setConfirmProduto({
-      mensagem: "Excluir produto do cardápio?",
-      onConfirm: async () => {
-        setConfirmProduto(null);
-        const { error } = await supabase.from("produtos").delete().eq("id", id);
-        if (error) { showToast("Erro ao excluir produto ✗"); return; }
-        showToast("Produto excluído ✓");
-        fetchProdutos();
-      }
-    });
+  async function excluir(id) {
+    if (!confirm("Excluir produto?")) return;
+    await supabase.from("produtos").delete().eq("id", id);
+    showToast("Produto excluído");
+    fetchProdutos();
   }
 
   const produtosFiltrados = produtos.filter(p => {
@@ -940,9 +896,6 @@ export default function PainelAdmin({ usuario, onLogout }) {
             </div>
           )}
         </main>
-
-        {/* MODAL CONFIRMAÇÃO PRODUTO */}
-        {confirmProduto && <ConfirmModal mensagem={confirmProduto.mensagem} onConfirm={confirmProduto.onConfirm} onCancel={() => setConfirmProduto(null)} />}
 
         {/* MODAL PRODUTO */}
         {modalOpen && (
