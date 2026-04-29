@@ -186,7 +186,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
     else setStep("awaiting_machine"); // débito ou crédito
   }
 
-  // Dinheiro: salva como "aguardando_pagamento" (paga na retirada) e vai direto para produção
+  // Dinheiro: salva como "pago" direto (aprovado imediatamente pelo operador)
   async function salvarPedidoDinheiro() {
     setStep("saving");
     setSaveError("");
@@ -197,7 +197,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
       parcelas: null,
       nome_cliente: nomeCliente.trim() || "Cliente",
       telefone: telefone.trim() || "-",
-      status: "aguardando_pagamento",
+      status: "pago",
       nsu,
     }]);
     if (error) {
@@ -458,7 +458,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
               <div style={{ width:72,height:72,borderRadius:"50%",background:"#00A868",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 16px" }}>✅</div>
               <p style={{ fontSize:21,fontWeight:800,color:"#00A868",margin:"0 0 4px",fontFamily:"Georgia,serif" }}>Pedido confirmado!</p>
               <p style={{ fontSize:14,color:C.gray,margin:"0 0 20px" }}>
-                {method === "cash" ? "💵 Pagamento na retirada" : `Pagamento aprovado · ${selMethod?.label}`}
+                {method === "cash" ? "💵 Pagamento em dinheiro — Aprovado" : `Pagamento aprovado · ${selMethod?.label}`}
               </p>
 
               <div style={{ background:"#F0FBF5",borderRadius:12,padding:"14px 16px",marginBottom:20,textAlign:"left" }}>
@@ -501,7 +501,7 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
               <p style={{ fontSize:12,color:C.gray,background:"#FFF0F0",borderRadius:9,padding:12,marginBottom:20 }}>
                 O pagamento foi realizado mas houve falha ao salvar. Anote o NSU <strong>{nsu}</strong> e registre manualmente se necessário.
               </p>
-              <button onClick={salvarPedidoPago}
+              <button onClick={method === "cash" ? salvarPedidoDinheiro : salvarPedidoPago}
                 style={{ width:"100%",padding:13,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8 }}>
                 🔄 Tentar novamente
               </button>
