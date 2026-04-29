@@ -148,66 +148,139 @@ const DRINKS = [
   { name: "Cachaça (dose)", price: 10 },
 ];
 
-// ─── STONE PAYMENT ────────────────────────────────────────────────────────────
-// Fluxo: identify → method → [awaiting_machine] → [pix_qr / cash_confirm] → success
-// O pedido só é gravado no banco com status "pago" APÓS confirmação real do pagamento.
-// Para dinheiro: confirmação imediata pelo operador.
-// Para débito/crédito/pix: o operador clica "Aprovado na maquininha" para confirmar.
+// ─── STONE PAYMENT via Supabase Edge Function ────────────────────────────────
+// Fluxo real: Frontend → Edge Function (backend seguro) → API Pagar.me/Stone
+// Chaves Stone NUNCA ficam no frontend — ficam apenas na Edge Function.
+// O pedido só é gravado como "pago" após aprovação real na maquininha Stone.
+//
+// SETUP: crie a Edge Function "stone-payment" no seu projeto Supabase.
+// Veja o arquivo supabase/functions/stone-payment/index.ts que foi gerado.
+
+const EDGE_FN = "https://unuirrizwupomshsvjfu.supabase.co/functions/v1/stone-payment";
+
 function StoneModal({ cart, total, onClose, onSuccess }) {
-  const [step, setStep] = useState("identify"); // identify | method | awaiting_machine | pix_qr | cash_confirm | saving | success | error
+  // steps: identify | method | sending | awaiting_machine | awaiting_pix | cash_confirm | success | error
+  const [step, setStep] = useState("identify");
   const [nomeCliente, setNomeCliente] = useState("");
   const [mesa, setMesa] = useState("");
   const [method, setMethod] = useState(null);
   const [installments, setInstallments] = useState(1);
   const [saveError, setSaveError] = useState("");
+  const [pedidoId, setPedidoId] = useState(null);
+  const [pagarmeId, setPagarmeId] = useState(null);
+  const [pixQrCode, setPixQrCode] = useState(null);   // string EMV (copia e cola)
+  const [pixQrBase64, setPixQrBase64] = useState(null); // URL da imagem QR
+  const [pixCopiado, setPixCopiado] = useState(false);
   const [nsu] = useState(() => String(Math.floor(Math.random()*9e6)+1e6));
-  const [pixCode] = useState(() => {
-    // Simula código EMV PIX (na integração real viria da API Stone)
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    return Array.from({length:32}, ()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+
+  // ── Polling: consulta o status do pedido a cada 3s (para débito/crédito/pix)
+  // Quando o webhook da Stone atualizar o Supabase, o polling detecta e avança
+  const pollingRef = useState(() => ({ current: null }))[0];
+  const pollingAtivo = ["awaiting_machine","awaiting_pix"].includes(step);
+
+  useState(() => {
+    if (!pollingAtivo || !pedidoId) { clearInterval(pollingRef.current); return; }
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res  = await fetch(`${EDGE_FN}?action=status&pedidoId=${pedidoId}`);
+        const json = await res.json();
+        if (json.status === "pago") {
+          clearInterval(pollingRef.current);
+          setStep("success");
+        } else if (["pagamento_recusado","cancelado"].includes(json.status)) {
+          clearInterval(pollingRef.current);
+          setSaveError("Pagamento recusado ou cancelado pela operadora.");
+          setStep("error");
+        }
+      } catch(e) { /* erros de rede transitórios ignorados */ }
+    }, 3000);
+    return () => clearInterval(pollingRef.current);
   });
 
+
   const methods = [
-    { id: "debit",   label: "Débito",            icon: "💳", desc: "Cartão de débito na maquininha" },
-    { id: "credit1x",label: "Crédito à Vista",   icon: "💳", desc: "Crédito sem parcelamento" },
-    { id: "credit",  label: "Crédito Parcelado",  icon: "💳", desc: "Parcelamento disponível" },
-    { id: "pix",     label: "PIX",                icon: "⚡", desc: "QR Code na maquininha Stone" },
-    { id: "cash",    label: "Dinheiro",           icon: "💵", desc: "Pagamento em espécie" },
+    { id: "debit",    label: "Débito",           icon: "💳", desc: "Cartão de débito na maquininha" },
+    { id: "credit1x", label: "Crédito à Vista",  icon: "💳", desc: "Crédito sem parcelamento" },
+    { id: "credit",   label: "Crédito Parcelado", icon: "💳", desc: "Parcelamento disponível" },
+    { id: "pix",      label: "PIX",              icon: "⚡", desc: "QR Code gerado na maquininha Stone" },
+    { id: "cash",     label: "Dinheiro",         icon: "💵", desc: "Pagamento em espécie" },
   ];
 
-  const fee = method === "credit" ? 0.0299 : 0;
-  const finalTotal = total * (1 + fee);
+  const fee          = method === "credit" ? 0.0299 : 0;
+  const finalTotal   = total * (1 + fee);
   const installmentVal = method === "credit" ? finalTotal / installments : finalTotal;
-  const selMethod = methods.find(m => m.id === method);
+  const selMethod    = methods.find(m => m.id === method);
 
-  // Redireciona para a tela correta de acordo com o método
-  function irParaMaquininha() {
-    if (method === "pix") setStep("pix_qr");
-    else if (method === "cash") setStep("cash_confirm");
-    else setStep("awaiting_machine"); // débito ou crédito
+  // ── Envia pedido para a Edge Function (Stone/Pagar.me) ──────────────────────
+  async function enviarParaStone() {
+    setStep("sending");
+    setSaveError("");
+    try {
+      const res  = await fetch(EDGE_FN, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cart,
+          total:        finalTotal,
+          method,
+          installments: method === "credit" ? installments : 1,
+          nomeCliente:  nomeCliente.trim(),
+          mesa:         mesa.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? "Falha na Edge Function");
+
+      setPedidoId(json.pedidoId);
+      setPagarmeId(json.pagarmeId ?? null);
+
+      if (method === "cash") {
+        // Dinheiro: Edge Function já marcou como "pago"
+        setStep("success");
+      } else if (method === "pix") {
+        setPixQrCode(json.pixQrCode   ?? null);
+        setPixQrBase64(json.pixQrBase64 ?? null);
+        setStep("awaiting_pix");
+      } else {
+        // Débito ou crédito: aguarda confirmação na maquininha
+        setStep("awaiting_machine");
+      }
+    } catch(e) {
+      console.error("Erro Stone:", e);
+      setSaveError(String(e));
+      setStep("error");
+    }
   }
 
-  // Salva o pedido no Supabase como "pago" — chamado SOMENTE após confirmação real
-  async function salvarPedidoPago() {
-    setStep("saving");
-    setSaveError("");
-    const { error } = await supabase.from("pedidos").insert([{
-      itens: cart,
-      total: finalTotal,
-      metodo_pagamento: method,
-      parcelas: method === "credit" ? installments : null,
-      nome_cliente: nomeCliente.trim() || "Cliente",
-      mesa: mesa.trim() || "-",
-      status: "pago",
-      nsu,
-    }]);
-    if (error) {
-      console.error("Erro ao salvar pedido:", error);
-      setSaveError("Erro ao registrar pedido no sistema. Tente novamente.");
-      setStep("error");
-      return;
+  // ── Confirmação manual (fallback quando webhook não chegou ainda) ────────────
+  async function confirmarManualmente() {
+    if (!pedidoId) return;
+    try {
+      const res  = await fetch(`${EDGE_FN}?action=status&pedidoId=${pedidoId}`);
+      const json = await res.json();
+      if (json.status === "pago") {
+        clearInterval(pollingRef.current);
+        setStep("success");
+      } else {
+        // Ainda "aguardando_pagamento" — força confirmação pelo operador
+        await supabase.from("pedidos").update({ status: "pago" }).eq("id", pedidoId);
+        setStep("success");
+      }
+    } catch(e) {
+      setSaveError("Erro ao confirmar. Verifique a conexão e tente novamente.");
     }
-    setStep("success");
+  }
+
+  // ── Cancelar pedido ─────────────────────────────────────────────────────────
+  async function cancelarPedido() {
+    if (pedidoId) {
+      await fetch(`${EDGE_FN}?action=cancelar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedidoId, pagarmeOrderId: pagarmeId }),
+      }).catch(()=>{});
+    }
+    setStep("method");
   }
 
   return (
@@ -341,26 +414,41 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                 </div>
               )}
 
-              <button onClick={irParaMaquininha} disabled={!method}
+              <button onClick={enviarParaStone} disabled={!method}
                 style={{ width:"100%",padding:14,background:method?"#00A868":"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:method?"pointer":"not-allowed",transition:"background 0.2s" }}>
                 {!method ? "Selecione uma forma de pagamento" :
-                 method==="pix" ? "⚡ Gerar QR Code PIX" :
+                 method==="pix" ? "⚡ Gerar QR Code PIX na Stone" :
                  method==="cash" ? "💵 Confirmar Dinheiro" :
-                 "💳 Apresentar na Maquininha"}
+                 "💳 Enviar para Maquininha Stone"}
               </button>
             </>
+          )}
+
+          {/* ── STEP: SENDING ─────────────────────────────────── */}
+          {step === "sending" && (
+            <div style={{ textAlign:"center",padding:"40px 0" }}>
+              <div style={{ fontSize:48,marginBottom:16,animation:"pulse 1s ease-in-out infinite" }}>🔄</div>
+              <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+              <p style={{ fontSize:17,fontWeight:700,color:C.dark,margin:"0 0 8px" }}>Enviando para a maquininha Stone…</p>
+              <p style={{ fontSize:13,color:C.gray }}>Comunicando com a API Stone/Pagar.me</p>
+            </div>
           )}
 
           {/* ── STEP: AWAITING MACHINE (débito/crédito) ────────── */}
           {step === "awaiting_machine" && (
             <div style={{ textAlign:"center",padding:"8px 0" }}>
-              <div style={{ fontSize:60,marginBottom:12,animation:"spin 2s linear infinite" }}>💳</div>
-              <style>{`@keyframes spin{0%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}100%{transform:rotate(-10deg)}}`}</style>
-              <p style={{ fontSize:20,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Aguardando Maquininha</p>
-              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px",lineHeight:1.7 }}>
-                Passe o cartão na maquininha Stone.<br/>
-                Após a <strong style={{color:C.dark}}>aprovação</strong> aparecer no visor,<br/>confirme abaixo para liberar o pedido.
+              <div style={{ fontSize:60,marginBottom:12,animation:"swing 2s ease-in-out infinite" }}>💳</div>
+              <style>{`@keyframes swing{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}`}</style>
+              <p style={{ fontSize:20,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Aguardando Maquininha Stone</p>
+              <p style={{ fontSize:13,color:C.gray,margin:"0 0 6px",lineHeight:1.7 }}>
+                O pedido foi enviado para a maquininha.<br/>
+                Peça ao cliente para <strong style={{color:C.dark}}>inserir o cartão e digitar a senha</strong>.<br/>
+                O sistema confirma automaticamente via webhook.
               </p>
+              <div style={{ background:"#F0FBF5",border:"1px solid #B0EED2",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:8 }}>
+                <span style={{ fontSize:18 }}>🔄</span>
+                <span style={{ fontSize:12,color:"#007A4D",fontWeight:600 }}>Verificando pagamento automaticamente a cada 3s…</span>
+              </div>
 
               <div style={{ background:"#F9F6F1",borderRadius:12,padding:"14px 16px",marginBottom:20,textAlign:"left" }}>
                 <div style={{ display:"flex",justifyContent:"space-between",marginBottom:6 }}>
@@ -385,32 +473,60 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                   <span style={{ fontSize:13,fontWeight:700,color:C.dark }}>Total cobrado</span>
                   <span style={{ fontSize:17,fontWeight:800,color:"#00A868" }}>R$ {finalTotal.toFixed(2).replace(".",",")}</span>
                 </div>
+                {pagarmeId && (
+                  <div style={{ marginTop:6,fontSize:10,color:C.gray,fontFamily:"monospace" }}>
+                    ID Pagar.me: {pagarmeId}
+                  </div>
+                )}
               </div>
 
-              <button onClick={salvarPedidoPago}
-                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
-                ✅ Aprovado na maquininha — Liberar pedido
+              <button onClick={confirmarManualmente}
+                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
+                ✅ Confirmar manualmente (aprovado na maquininha)
               </button>
-              <button onClick={()=>setStep("method")}
+              <button onClick={cancelarPedido}
                 style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
-                ← Voltar (pagamento não realizado)
+                ← Cancelar e voltar
               </button>
             </div>
           )}
 
-          {/* ── STEP: PIX QR ──────────────────────────────────── */}
-          {step === "pix_qr" && (
+          {/* ── STEP: AWAITING PIX ────────────────────────────── */}
+          {step === "awaiting_pix" && (
             <div style={{ textAlign:"center",padding:"8px 0" }}>
-              <p style={{ fontSize:19,fontWeight:800,color:C.dark,margin:"0 0 4px",fontFamily:"Georgia,serif" }}>PIX — QR Code</p>
-              <p style={{ fontSize:12,color:C.gray,margin:"0 0 18px" }}>Mostre o QR Code da maquininha Stone para o cliente escanear</p>
+              <p style={{ fontSize:19,fontWeight:800,color:C.dark,margin:"0 0 4px",fontFamily:"Georgia,serif" }}>PIX — Aguardando pagamento</p>
+              <p style={{ fontSize:12,color:C.gray,margin:"0 0 16px" }}>QR Code gerado na maquininha Stone</p>
 
-              {/* QR Code simulado — na integração real viria do SDK Stone */}
+              {/* QR Code real (URL da imagem retornada pelo Pagar.me) ou fallback */}
               <div style={{ background:"#F0FBF5",border:"2px dashed #00A868",borderRadius:14,padding:20,marginBottom:16,display:"inline-block" }}>
-                <div style={{ width:140,height:140,background:"#fff",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",margin:"0 auto",boxShadow:"0 2px 8px rgba(0,0,0,0.1)" }}>
-                  <span style={{ fontSize:60 }}>⚡</span>
-                  <span style={{ fontSize:9,color:C.gray,fontFamily:"monospace",marginTop:4,wordBreak:"break-all",padding:"0 4px",lineHeight:1.3 }}>{pixCode.slice(0,16)}</span>
+                {pixQrBase64 ? (
+                  <img src={pixQrBase64} alt="QR Code PIX" style={{ width:160,height:160,borderRadius:8 }} />
+                ) : (
+                  <div style={{ width:160,height:160,background:"#fff",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",margin:"0 auto",boxShadow:"0 2px 8px rgba(0,0,0,0.1)" }}>
+                    <span style={{ fontSize:60 }}>⚡</span>
+                    <span style={{ fontSize:10,color:C.gray,marginTop:4 }}>QR na maquininha</span>
+                  </div>
+                )}
+                <p style={{ fontSize:11,color:"#007A4D",margin:"10px 0 0",fontWeight:700 }}>Escaneie pelo celular ou na maquininha Stone</p>
+              </div>
+
+              {/* Código copia e cola */}
+              {pixQrCode && (
+                <div style={{ background:"#F9F6F1",borderRadius:10,padding:"10px 14px",marginBottom:14,textAlign:"left" }}>
+                  <p style={{ fontSize:11,color:C.gray,margin:"0 0 4px",fontWeight:700 }}>PIX Copia e Cola</p>
+                  <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                    <span style={{ fontSize:10,fontFamily:"monospace",color:C.dark,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{pixQrCode}</span>
+                    <button onClick={()=>{ navigator.clipboard.writeText(pixQrCode); setPixCopiado(true); setTimeout(()=>setPixCopiado(false),2000); }}
+                      style={{ background:pixCopiado?"#00A868":C.red,color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:700,flexShrink:0 }}>
+                      {pixCopiado?"✓ Copiado!":"Copiar"}
+                    </button>
+                  </div>
                 </div>
-                <p style={{ fontSize:11,color:"#007A4D",margin:"10px 0 0",fontWeight:700 }}>Escaneie na maquininha Stone</p>
+              )}
+
+              <div style={{ background:"#F0FBF5",border:"1px solid #B0EED2",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:8 }}>
+                <span style={{ fontSize:16 }}>🔄</span>
+                <span style={{ fontSize:12,color:"#007A4D",fontWeight:600 }}>Confirmação automática via webhook Stone a cada 3s…</span>
               </div>
 
               <div style={{ background:"#F9F6F1",borderRadius:10,padding:"10px 14px",marginBottom:16,textAlign:"left" }}>
@@ -424,51 +540,14 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
                 </div>
               </div>
 
-              <p style={{ fontSize:12,color:C.gray,margin:"0 0 14px",lineHeight:1.6 }}>
-                Após o cliente efetuar o pagamento e a <strong style={{color:C.dark}}>confirmação</strong> aparecer na maquininha, clique abaixo para liberar o pedido.
-              </p>
-
-              <button onClick={salvarPedidoPago}
-                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
-                ✅ PIX recebido — Liberar pedido
+              <button onClick={confirmarManualmente}
+                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
+                ✅ PIX recebido — Confirmar manualmente
               </button>
-              <button onClick={()=>setStep("method")}
+              <button onClick={cancelarPedido}
                 style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
-                ← Voltar (pagamento não realizado)
+                ← Cancelar e voltar
               </button>
-            </div>
-          )}
-
-          {/* ── STEP: CASH CONFIRM ────────────────────────────── */}
-          {step === "cash_confirm" && (
-            <div style={{ textAlign:"center",padding:"8px 0" }}>
-              <div style={{ fontSize:56,marginBottom:12 }}>💵</div>
-              <p style={{ fontSize:19,fontWeight:800,color:C.dark,margin:"0 0 8px",fontFamily:"Georgia,serif" }}>Pagamento em Dinheiro</p>
-              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px",lineHeight:1.6 }}>Confirme o recebimento do valor abaixo para liberar o pedido no sistema.</p>
-
-              <div style={{ background:"#FFFBF0",border:"1.5px solid #F5E6B0",borderRadius:12,padding:"18px 16px",marginBottom:20 }}>
-                <div style={{ fontSize:12,color:"#7A6000",marginBottom:4 }}>Valor a receber</div>
-                <div style={{ fontSize:34,fontWeight:800,color:"#7A4500" }}>R$ {total.toFixed(2).replace(".",",")}</div>
-                <div style={{ fontSize:12,color:C.gray,marginTop:6 }}>{nomeCliente} · {mesa}</div>
-              </div>
-
-              <button onClick={salvarPedidoPago}
-                style={{ width:"100%",padding:15,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,boxShadow:"0 4px 16px rgba(0,168,104,0.35)" }}>
-                ✅ Dinheiro recebido — Liberar pedido
-              </button>
-              <button onClick={()=>setStep("method")}
-                style={{ width:"100%",padding:10,background:"none",border:"1px solid #DDD",borderRadius:9,fontSize:13,color:C.gray,cursor:"pointer" }}>
-                ← Voltar
-              </button>
-            </div>
-          )}
-
-          {/* ── STEP: SAVING ──────────────────────────────────── */}
-          {step === "saving" && (
-            <div style={{ textAlign:"center",padding:"32px 0" }}>
-              <div style={{ fontSize:44,marginBottom:16 }}>⏳</div>
-              <p style={{ fontSize:16,fontWeight:700,color:C.dark,margin:"0 0 6px" }}>Registrando pedido…</p>
-              <p style={{ fontSize:13,color:C.gray }}>Salvando no sistema, aguarde</p>
             </div>
           )}
 
@@ -514,12 +593,14 @@ function StoneModal({ cart, total, onClose, onSuccess }) {
           {step === "error" && (
             <div style={{ textAlign:"center",padding:"16px 0" }}>
               <div style={{ fontSize:52,marginBottom:12 }}>⚠️</div>
-              <p style={{ fontSize:18,fontWeight:800,color:"#C8181A",margin:"0 0 8px" }}>Erro ao registrar pedido</p>
-              <p style={{ fontSize:13,color:C.gray,margin:"0 0 20px" }}>{saveError}</p>
-              <p style={{ fontSize:12,color:C.gray,background:"#FFF0F0",borderRadius:9,padding:12,marginBottom:20 }}>
-                O pagamento foi realizado mas houve falha ao salvar. Anote o NSU <strong>{nsu}</strong> e registre manualmente se necessário.
-              </p>
-              <button onClick={salvarPedidoPago}
+              <p style={{ fontSize:18,fontWeight:800,color:"#C8181A",margin:"0 0 8px" }}>Erro no pagamento</p>
+              <p style={{ fontSize:13,color:C.gray,margin:"0 0 16px" }}>{saveError}</p>
+              {pagarmeId && (
+                <p style={{ fontSize:12,color:C.gray,background:"#FFF0F0",borderRadius:9,padding:12,marginBottom:16,fontFamily:"monospace" }}>
+                  ID Pagar.me: {pagarmeId}<br/>NSU local: {nsu}
+                </p>
+              )}
+              <button onClick={()=>setStep("method")}
                 style={{ width:"100%",padding:13,background:"#00A868",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8 }}>
                 🔄 Tentar novamente
               </button>
