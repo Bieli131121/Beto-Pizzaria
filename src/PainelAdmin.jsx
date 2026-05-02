@@ -198,7 +198,20 @@ const statusCfg = {
   entregue:   { label:"Entregue",    color:"#8a8070", bg:"rgba(138,128,112,0.12)", icon:"🛵", step:3 },
   cancelado:  { label:"Cancelado",   color:"#e84242", bg:"rgba(232,66,66,0.12)",   icon:"✕",  step:-1 },
 };
-const proximoStatus = { aguardando_pagamento:"pago", pago:"em_preparo", em_preparo:"entregue" };
+// Fluxo normal (pix/cartão): aguardando_pagamento → pago → em_preparo → entregue
+// Fluxo dinheiro (cash):       aguardando_pagamento → em_preparo → entregue (paga na retirada)
+function getProximoStatus(status, metodo_pagamento) {
+  const isDinheiro = metodo_pagamento === "cash";
+  if (isDinheiro) {
+    if (status === "aguardando_pagamento") return "em_preparo";
+    if (status === "em_preparo") return "entregue";
+    return null;
+  }
+  if (status === "aguardando_pagamento") return "pago";
+  if (status === "pago") return "em_preparo";
+  if (status === "em_preparo") return "entregue";
+  return null;
+}
 const metodoLabel = { debit:"Débito", credit1x:"Créd. à Vista", credit:"Créd. Parcelado", pix:"PIX", cash:"Dinheiro" };
 
 // ─── SUPABASE REALTIME HOOK ───────────────────────────────────────────────────
@@ -442,7 +455,7 @@ function PedidosPage({ usuarioEmail }) {
         <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
           {paginados.map(pedido => {
             const cfg = statusCfg[pedido.status]||statusCfg.aguardando_pagamento;
-            const prox = proximoStatus[pedido.status];
+            const prox = getProximoStatus(pedido.status, pedido.metodo_pagamento);
             const itens = Array.isArray(pedido.itens)?pedido.itens:[];
             const isOpen = expandido===pedido.id;
             const dt = new Date(pedido.created_at);
@@ -455,6 +468,9 @@ function PedidosPage({ usuarioEmail }) {
                       <span style={{ fontWeight:700, fontSize:14 }}>{pedido.nome_cliente||"Cliente"}</span>
                       <span style={{ fontSize:12, color:"var(--muted)" }}>· Mesa {pedido.mesa||"-"}</span>
                       <span style={{ fontSize:11, padding:"2px 9px", borderRadius:20, background:cfg.bg, color:cfg.color, fontWeight:600 }}>{cfg.icon} {cfg.label}</span>
+                      {pedido.metodo_pagamento === "cash" && pedido.status !== "entregue" && pedido.status !== "cancelado" && (
+                        <span style={{ fontSize:11, padding:"2px 9px", borderRadius:20, background:"rgba(22,163,74,0.12)", color:"var(--success)", fontWeight:600 }}>💵 Pagar na retirada</span>
+                      )}
                       {minutos < 90 && <span style={{ fontSize:11, color:minutos>30?"var(--danger)":minutos>15?"var(--accent2)":"var(--muted)" }}>⏱ {minutos}min</span>}
                     </div>
                     <div style={{ display:"flex", gap:12, fontSize:12, color:"var(--muted)", flexWrap:"wrap" }}>
@@ -497,7 +513,13 @@ function PedidosPage({ usuarioEmail }) {
                     </div>
                     {/* Ações */}
                     <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
-                      {prox&&<button onClick={()=>atualizarStatus(pedido.id,prox,pedido)} style={{ padding:"8px 16px", borderRadius:9, border:"none", background:"var(--accent)", color:"#fff", cursor:"pointer", fontSize:12, fontWeight:600 }}>{statusCfg[prox]?.icon} → {statusCfg[prox]?.label}</button>}
+                      {prox&&<button onClick={()=>atualizarStatus(pedido.id,prox,pedido)} style={{ padding:"8px 16px", borderRadius:9, border:"none", background:"var(--accent)", color:"#fff", cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                        {statusCfg[prox]?.icon} {
+                          pedido.metodo_pagamento === "cash" && prox === "em_preparo" ? "Enviar para preparo" :
+                          pedido.metodo_pagamento === "cash" && prox === "entregue"   ? "Confirmar retirada e cobrança" :
+                          `→ ${statusCfg[prox]?.label}`
+                        }
+                      </button>}
                       <button onClick={()=>imprimirPedido(pedido)} style={{ padding:"8px 14px", borderRadius:9, border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", cursor:"pointer", fontSize:12 }}>🖨️ Imprimir</button>
                       {pedido.status!=="cancelado"&&pedido.status!=="entregue"&&(
                         <button onClick={()=>setConfirm({msg:"Cancelar este pedido?",fn:()=>{atualizarStatus(pedido.id,"cancelado",pedido);setConfirm(null);}})} style={{ padding:"8px 14px", borderRadius:9, border:"1px solid var(--danger)", background:"transparent", color:"var(--danger)", cursor:"pointer", fontSize:12, fontWeight:600 }}>✕ Cancelar</button>
@@ -580,11 +602,16 @@ function KDSPage() {
                     📝 {pedido.observacao}
                   </div>
                 )}
-                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
                   <span style={{ flex:1, fontSize:11, padding:"4px 10px", borderRadius:20, background:statusCfg[pedido.status]?.bg, color:statusCfg[pedido.status]?.color, fontWeight:600, textAlign:"center" }}>
                     {statusCfg[pedido.status]?.icon} {statusCfg[pedido.status]?.label}
                   </span>
-                  <button onClick={()=>marcarPronto(pedido.id)} style={{ padding:"7px 16px", borderRadius:9, border:"none", background:"var(--success)", color:"#fff", cursor:"pointer", fontSize:12, fontWeight:700 }}>✓ Pronto</button>
+                  {pedido.metodo_pagamento === "cash" && (
+                    <span style={{ fontSize:11, padding:"4px 10px", borderRadius:20, background:"rgba(22,163,74,0.12)", color:"var(--success)", fontWeight:600 }}>💵 Pagar na retirada</span>
+                  )}
+                  <button onClick={()=>marcarPronto(pedido.id)} style={{ padding:"7px 16px", borderRadius:9, border:"none", background:"var(--success)", color:"#fff", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                    {pedido.metodo_pagamento === "cash" ? "✓ Retirado" : "✓ Pronto"}
+                  </button>
                 </div>
               </div>
             );
