@@ -13,26 +13,26 @@ const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #f4f5f7; --surface: #ffffff; --surface2: #f0f2f5;
-    --border: #e1e4e8; --accent: #e8622a; --accent2: #f5a623;
-    --text: #1a1a2e; --muted: #6b7280; --success: #16a34a; --danger: #dc2626;
-    --blue: #2563eb; --purple: #7c3aed;
+    --bg: #F9F6F1; --surface: #FFFFFF; --surface2: #EAE4DA;
+    --border: #DDD5C8; --accent: #C8181A; --accent2: #9E1214;
+    --text: #1C1208; --muted: #6B6050; --success: #1A6B2E; --danger: #C8181A;
+    --blue: #1A6B2E; --purple: #9E1214;
   }
   body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
   .app { display: flex; min-height: 100vh; }
-  .sidebar { width: 240px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; padding: 28px 0; position: fixed; height: 100vh; z-index: 10; overflow-y: auto; }
+  .sidebar { width: 240px; background: #1C1208; border-right: 1px solid #2e2218; display: flex; flex-direction: column; padding: 28px 0; position: fixed; height: 100vh; z-index: 10; overflow-y: auto; }
   .logo { padding: 0 24px 28px; border-bottom: 1px solid var(--border); }
-  .logo h1 { font-family: 'Playfair Display', serif; font-size: 22px; color: #f97316; line-height: 1.1; }
-  .logo span { font-size: 11px; color: #94a3b8; letter-spacing: 2px; text-transform: uppercase; }
+  .logo h1 { font-family: 'Playfair Display', serif; font-size: 22px; color: #C8181A; line-height: 1.1; }
+  .logo span { font-size: 11px; color: #8a7060; letter-spacing: 2px; text-transform: uppercase; }
   .nav { padding: 16px 12px; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-  .nav-section { font-size: 10px; color: #64748b; letter-spacing: 1.5px; text-transform: uppercase; padding: 12px 14px 4px; }
-  .nav-item { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-radius: 10px; cursor: pointer; transition: all 0.2s; color: #94a3b8; font-size: 13px; font-weight: 500; border: none; background: none; width: 100%; text-align: left; position: relative; }
-  .nav-item:hover { background: #334155; color: #f1f5f9; }
+  .nav-section { font-size: 10px; color: #8a7060; letter-spacing: 1.5px; text-transform: uppercase; padding: 12px 14px 4px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-radius: 10px; cursor: pointer; transition: all 0.2s; color: #a09080; font-size: 13px; font-weight: 500; border: none; background: none; width: 100%; text-align: left; position: relative; }
+  .nav-item:hover { background: #2e2218; color: #F9F6F1; }
   .nav-item.active { background: var(--accent); color: #fff; }
   .nav-item .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
   .nav-badge { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: var(--danger); color: #fff; border-radius: 20px; font-size: 10px; font-weight: 700; padding: 2px 6px; min-width: 18px; text-align: center; }
-  .sidebar-footer { padding: 16px 24px; border-top: 1px solid #334155; }
-  .badge-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4ade80; }
+  .sidebar-footer { padding: 16px 24px; border-top: 1px solid #2e2218; }
+  .badge-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4caf7d; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
   .main { margin-left: 240px; flex: 1; padding: 32px; min-height: 100vh; }
@@ -41,7 +41,7 @@ const styles = `
   .page-header p { color: var(--muted); font-size: 14px; margin-top: 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
   .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 22px; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-  .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #C8181A, #9E1214); }
   .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
   .stat-value { font-family: 'Playfair Display', serif; font-size: 26px; color: var(--text); margin-top: 6px; }
   .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
@@ -52,7 +52,7 @@ const styles = `
   .search-box::placeholder { color: var(--muted); }
   .filter-btn { padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif; font-weight: 500; }
   .filter-btn:hover, .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn-primary { padding: 9px 18px; border-radius: 10px; border: none; background: linear-gradient(135deg, var(--accent), #d4501f); color: #fff; font-size: 13px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 600; transition: opacity 0.2s; white-space: nowrap; }
+  .btn-primary { padding: 9px 18px; border-radius: 10px; border: none; background: linear-gradient(135deg, #C8181A, #9E1214); color: #fff; font-size: 13px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 600; transition: opacity 0.2s; white-space: nowrap; }
   .btn-primary:hover { opacity: 0.85; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
@@ -101,10 +101,10 @@ const styles = `
   .fin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; position: relative; overflow: hidden; }
   .fin-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
   .fin-card.green::before { background: linear-gradient(90deg,#4caf7d,#81c784); }
-  .fin-card.orange::before { background: linear-gradient(90deg,var(--accent),var(--accent2)); }
-  .fin-card.blue::before { background: linear-gradient(90deg,#42a5f5,#7e57c2); }
+  .fin-card.orange::before { background: linear-gradient(90deg,#C8181A,#9E1214); }
+  .fin-card.blue::before { background: linear-gradient(90deg,#1A6B2E,#2E8B57); }
   .fin-card.red::before { background: linear-gradient(90deg,#e84242,#f06292); }
-  .fin-card.purple::before { background: linear-gradient(90deg,#ab7aff,#7e57c2); }
+  .fin-card.purple::before { background: linear-gradient(90deg,#9E1214,#C8181A); }
   .fin-card.gray::before { background: linear-gradient(90deg,#8a8070,#a09080); }
   .fin-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
   .fin-value { font-family: 'Playfair Display', serif; font-size: 24px; color: var(--text); }
@@ -117,7 +117,7 @@ const styles = `
   .metodo-row { display: flex; align-items: center; gap: 12px; }
   .metodo-label { font-size: 12px; color: var(--text); width: 110px; flex-shrink: 0; }
   .metodo-track { flex: 1; height: 7px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
-  .metodo-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.5s; }
+  .metodo-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #C8181A, #9E1214); transition: width 0.5s; }
   .metodo-val { font-size: 12px; color: var(--muted); width: 72px; text-align: right; flex-shrink: 0; }
   .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
   .table-head { display: grid; padding: 11px 18px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
@@ -139,9 +139,9 @@ const styles = `
   .empty-state .emoji { font-size: 56px; margin-bottom: 14px; }
   .empty-state h3 { font-family: 'Playfair Display', serif; font-size: 20px; color: var(--text); margin-bottom: 8px; }
   .toast { position: fixed; bottom: 24px; right: 24px; padding: 11px 18px; border-radius: 12px; font-size: 13px; font-weight: 500; z-index: 300; animation: slideUp 0.3s ease; display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.4); max-width: 320px; }
-  .toast.success { background: var(--success); color: #fff; }
-  .toast.error { background: var(--danger); color: #fff; }
-  .toast.info { background: var(--accent); color: #fff; }
+  .toast.success { background: #1A6B2E; color: #fff; }
+  .toast.error { background: #C8181A; color: #fff; }
+  .toast.info { background: #C8181A; color: #fff; }
   .sync-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--success); margin-right: 5px; vertical-align: middle; }
   .promo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 22px; transition: border-color 0.2s; }
   .promo-card:hover { border-color: var(--accent); }
@@ -1172,6 +1172,7 @@ function ConfiguracoesPage({ usuario }) {
             ["produtos","id, nome, descricao, preco, categoria, imagem_url, ativo, estoque, estoque_minimo, created_at"],
             ["mesas","id, numero, capacidade, status, created_at"],
             ["promocoes","id, nome, descricao, tipo, valor, codigo, validade, ativo, created_at"],
+            ["reservas","id, nome, telefone, data, horario, pessoas, observacao, status, created_at"],
             ["logs_admin","id, acao, detalhe, usuario, created_at"],
           ].map(([t,cols])=>(
             <div key={t} style={{ background:"var(--surface2)", borderRadius:8, padding:"10px 14px" }}>
@@ -1182,6 +1183,203 @@ function ConfiguracoesPage({ usuario }) {
         </div>
       </div>
       {toast&&<Toast msg={toast.msg} type={toast.type}/>}
+    </>
+  );
+}
+
+
+// ─── RESERVAS PAGE ────────────────────────────────────────────────────────────
+function ReservasPage({ usuarioEmail }) {
+  const { dados: reservas, loading, refresh } = useRealtime("reservas");
+  const [filtro, setFiltro] = useState("todos");
+  const [busca, setBusca] = useState("");
+  const [confirm, setConfirm] = useState(null);
+  const [modalDetalhe, setModalDetalhe] = useState(null);
+  const [toast, showToast] = useToast();
+
+  const statusCfgRes = {
+    pendente:   { label:"Pendente",   color:"#f5a623", bg:"rgba(245,166,35,0.12)",  icon:"⏳" },
+    confirmada: { label:"Confirmada", color:"#16a34a", bg:"rgba(22,163,74,0.12)",   icon:"✅" },
+    cancelada:  { label:"Cancelada",  color:"#dc2626", bg:"rgba(220,38,38,0.12)",   icon:"✕"  },
+    concluida:  { label:"Concluída",  color:"#6b7280", bg:"rgba(107,114,128,0.12)", icon:"🏁" },
+  };
+
+  async function atualizarStatus(id, novoStatus) {
+    const { error } = await supabase.from("reservas").update({ status: novoStatus }).eq("id", id);
+    if (error) { showToast("Erro ao atualizar ✗", "error"); return; }
+    showToast(`${statusCfgRes[novoStatus]?.icon} Reserva → ${statusCfgRes[novoStatus]?.label}`);
+    registrarLog("reserva", `#${id?.slice(0,8)} → ${novoStatus}`, usuarioEmail);
+    setModalDetalhe(null);
+    refresh();
+  }
+
+  async function excluir(id) {
+    const { error } = await supabase.from("reservas").delete().eq("id", id);
+    if (error) { showToast("Erro ao excluir ✗", "error"); return; }
+    showToast("Reserva excluída ✓");
+    setConfirm(null); setModalDetalhe(null); refresh();
+  }
+
+  const hoje = new Date().toDateString();
+  const hojeISO = new Date().toISOString().slice(0, 10);
+
+  const totais = Object.keys(statusCfgRes).reduce((a, s) => { a[s] = reservas.filter(r => r.status === s).length; return a; }, {});
+  const hojeCount = reservas.filter(r => r.data === hojeISO).length;
+
+  let filtradas = reservas.filter(r => {
+    const ms = filtro === "todos" || r.status === filtro;
+    const mb = !busca || (r.nome||"").toLowerCase().includes(busca.toLowerCase()) || (r.telefone||"").includes(busca) || (r.data||"").includes(busca);
+    return ms && mb;
+  }).sort((a, b) => {
+    // Sort by date+time ascending
+    const da = (a.data||"") + (a.horario||"");
+    const db = (b.data||"") + (b.horario||"");
+    return da.localeCompare(db);
+  });
+
+  return (
+    <>
+      <div className="page-header">
+        <h2>Reservas 🍽️</h2>
+        <p>Gerencie as reservas de mesas — Realtime <span className="sync-dot"/></p>
+      </div>
+
+      {/* Resumo */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10, marginBottom:20 }}>
+        <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:13, padding:"14px 16px", position:"relative", overflow:"hidden" }}>
+          <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:"linear-gradient(90deg,var(--accent),var(--accent2))" }}/>
+          <div style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:1 }}>Reservas Hoje</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, marginTop:4, color:"var(--accent)" }}>{hojeCount}</div>
+        </div>
+        {Object.entries(statusCfgRes).map(([s, cfg]) => (
+          <div key={s} onClick={() => setFiltro(filtro === s ? "todos" : s)}
+            style={{ background:"var(--surface)", border:`1px solid ${filtro===s?cfg.color:"var(--border)"}`, borderRadius:13, padding:"14px 16px", cursor:"pointer", transition:"all 0.2s" }}>
+            <div style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:1, marginBottom:3 }}>{cfg.icon} {cfg.label}</div>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:cfg.color }}>{totais[s]||0}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
+        <input style={{ flex:1, minWidth:180, background:"var(--surface)", border:"1px solid var(--border)", borderRadius:9, padding:"8px 13px", color:"var(--text)", fontSize:13, fontFamily:"'DM Sans',sans-serif", outline:"none" }}
+          placeholder="🔍 Nome, telefone ou data (AAAA-MM-DD)..." value={busca} onChange={e => setBusca(e.target.value)}/>
+        <button onClick={() => setFiltro("todos")} style={{ padding:"8px 12px", borderRadius:9, border:"1px solid var(--border)", background:filtro==="todos"?"var(--accent)":"var(--surface)", color:filtro==="todos"?"#fff":"var(--muted)", cursor:"pointer", fontSize:12 }}>
+          Todas ({reservas.length})
+        </button>
+        <button onClick={refresh} style={{ padding:"8px 10px", borderRadius:9, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>🔄</button>
+      </div>
+
+      {/* Lista */}
+      {loading ? (
+        <div style={{ textAlign:"center", padding:60, color:"var(--muted)" }}>Carregando…</div>
+      ) : filtradas.length === 0 ? (
+        <div className="empty-state">
+          <div className="emoji">🍽️</div>
+          <h3>Nenhuma reserva encontrada</h3>
+          <p>As reservas feitas pelos clientes aparecem aqui em tempo real.</p>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+          {filtradas.map(res => {
+            const cfg = statusCfgRes[res.status] || statusCfgRes.pendente;
+            const dtData = res.data ? res.data.split("-").reverse().join("/") : "-";
+            const isHoje = res.data === hojeISO;
+            const isFutura = res.data > hojeISO;
+            return (
+              <div key={res.id} onClick={() => setModalDetalhe(res)}
+                style={{ background:"var(--surface)", border:`1px solid ${isHoje?"var(--accent)":isFutura&&res.status==="confirmada"?"var(--success)":"var(--border)"}`, borderRadius:14, padding:"14px 18px", cursor:"pointer", transition:"all 0.2s", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                <div style={{ flex:1, minWidth:200 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                    <span style={{ fontWeight:700, fontSize:15 }}>{res.nome || "—"}</span>
+                    <span style={{ fontSize:11, padding:"2px 9px", borderRadius:20, background:cfg.bg, color:cfg.color, fontWeight:600 }}>{cfg.icon} {cfg.label}</span>
+                    {isHoje && <span style={{ fontSize:11, padding:"2px 9px", borderRadius:20, background:"rgba(232,98,42,0.12)", color:"var(--accent)", fontWeight:600 }}>📅 Hoje</span>}
+                  </div>
+                  <div style={{ display:"flex", gap:14, fontSize:12, color:"var(--muted)", flexWrap:"wrap" }}>
+                    <span>📅 {dtData} às {res.horario||"-"}</span>
+                    <span>👥 {res.pessoas} {res.pessoas==="1"?"pessoa":"pessoas"}</span>
+                    <span>📞 {res.telefone||"-"}</span>
+                  </div>
+                  {res.observacao && <div style={{ fontSize:12, color:"var(--muted)", marginTop:4, fontStyle:"italic" }}>📝 {res.observacao}</div>}
+                </div>
+                <div style={{ fontSize:12, color:"var(--muted)" }}>
+                  {new Date(res.created_at).toLocaleString("pt-BR", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
+                  <div style={{ fontSize:11, marginTop:2 }}>▶ detalhes</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal detalhe / ações */}
+      {modalDetalhe && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalDetalhe(null)}>
+          <div className="modal">
+            <div className="modal-title">Reserva — {modalDetalhe.nome}</div>
+            {(() => {
+              const cfg = statusCfgRes[modalDetalhe.status] || statusCfgRes.pendente;
+              const dtData = modalDetalhe.data ? modalDetalhe.data.split("-").reverse().join("/") : "-";
+              return (
+                <>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+                    {[
+                      ["👤 Cliente", modalDetalhe.nome||"-"],
+                      ["📞 Telefone", modalDetalhe.telefone||"-"],
+                      ["📅 Data", dtData],
+                      ["🕐 Horário", modalDetalhe.horario||"-"],
+                      ["👥 Pessoas", modalDetalhe.pessoas||"-"],
+                      ["📊 Status", `${cfg.icon} ${cfg.label}`],
+                    ].map(([l, v]) => (
+                      <div key={l} style={{ background:"var(--surface2)", borderRadius:9, padding:"10px 14px" }}>
+                        <div style={{ fontSize:11, color:"var(--muted)", marginBottom:3 }}>{l}</div>
+                        <div style={{ fontSize:14, fontWeight:600 }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {modalDetalhe.observacao && (
+                    <div style={{ background:"rgba(232,98,42,0.08)", border:"1px solid rgba(232,98,42,0.2)", borderRadius:9, padding:"10px 14px", marginBottom:20 }}>
+                      <div style={{ fontSize:11, color:"var(--muted)", marginBottom:3 }}>📝 Observação</div>
+                      <div style={{ fontSize:14 }}>{modalDetalhe.observacao}</div>
+                    </div>
+                  )}
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {modalDetalhe.status === "pendente" && (
+                      <button onClick={() => atualizarStatus(modalDetalhe.id, "confirmada")}
+                        style={{ flex:1, padding:"9px 16px", borderRadius:9, border:"none", background:"var(--success)", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                        ✅ Confirmar
+                      </button>
+                    )}
+                    {(modalDetalhe.status === "pendente" || modalDetalhe.status === "confirmada") && (
+                      <button onClick={() => atualizarStatus(modalDetalhe.id, "cancelada")}
+                        style={{ flex:1, padding:"9px 16px", borderRadius:9, border:"1px solid var(--danger)", background:"transparent", color:"var(--danger)", cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                        ✕ Cancelar
+                      </button>
+                    )}
+                    {modalDetalhe.status === "confirmada" && (
+                      <button onClick={() => atualizarStatus(modalDetalhe.id, "concluida")}
+                        style={{ flex:1, padding:"9px 16px", borderRadius:9, border:"1px solid var(--muted)", background:"transparent", color:"var(--muted)", cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                        🏁 Concluída
+                      </button>
+                    )}
+                    <button onClick={() => setConfirm({ msg:"Excluir esta reserva?", fn:() => excluir(modalDetalhe.id) })}
+                      style={{ padding:"9px 14px", borderRadius:9, border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>
+                      🗑️
+                    </button>
+                  </div>
+                  <button onClick={() => setModalDetalhe(null)}
+                    style={{ width:"100%", marginTop:12, padding:"9px", borderRadius:9, border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>
+                    Fechar
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {confirm && <ConfirmModal mensagem={confirm.msg} onConfirm={confirm.fn} onCancel={() => setConfirm(null)}/>}
+      {toast && <Toast msg={toast.msg} type={toast.type}/>}
     </>
   );
 }
@@ -1208,6 +1406,8 @@ export default function PainelAdmin({ usuario, onLogout }) {
   const pedidosPendentes = pedidosTodos.filter(p => ["aguardando_pagamento","em_preparo","pago"].includes(p.status)).length;
   const emPreparo = pedidosTodos.filter(p => p.status === "em_preparo" || p.status === "pago").length;
   const estoqueBaixo = produtos.filter(p => p.estoque != null && p.estoque <= (p.estoque_minimo||5)).length;
+  const { dados: reservasTodos } = useRealtime("reservas");
+  const reservasPendentes = reservasTodos.filter(r => r.status === "pendente").length;
 
   useEffect(() => { fetchProdutos(); }, []);
 
@@ -1266,6 +1466,7 @@ export default function PainelAdmin({ usuario, onLogout }) {
     { id:"pedidos",       icon:"📋", label:"Pedidos",      badge:pedidosPendentes>0?pedidosPendentes:null },
     { id:"kds",           icon:"🍳", label:"Cozinha KDS",  badge:emPreparo>0?emPreparo:null },
     { id:"mesas",         icon:"🪑", label:"Mesas" },
+    { id:"reservas",      icon:"🍽️", label:"Reservas",     badge:reservasPendentes>0?reservasPendentes:null },
     { group:"Negócio" },
     { id:"financeiro",    icon:"💰", label:"Financeiro" },
     { id:"clientes",      icon:"👥", label:"Clientes" },
@@ -1399,6 +1600,7 @@ export default function PainelAdmin({ usuario, onLogout }) {
           {page==="pedidos"&&<PedidosPage usuarioEmail={usuario?.email}/>}
           {page==="kds"&&<KDSPage/>}
           {page==="mesas"&&<MesasPage usuarioEmail={usuario?.email}/>}
+          {page==="reservas"&&<ReservasPage usuarioEmail={usuario?.email}/>}
           {page==="financeiro"&&<FinanceiroPage/>}
           {page==="clientes"&&<ClientesPage/>}
           {page==="log"&&<LogPage/>}
