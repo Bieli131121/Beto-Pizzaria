@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { usePlatform } from "./usePlatform";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -181,12 +182,31 @@ const styles = `
   @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
   @media (max-width: 900px) { .stats { grid-template-columns: repeat(2,1fr); } .fin-grid { grid-template-columns: repeat(2,1fr); } }
   @media (max-width: 768px) {
-    .sidebar { width: 56px; }
-    .sidebar .logo h1, .sidebar .logo span, .nav-item span, .sidebar-footer, .nav-section { display: none; }
-    .main { margin-left: 56px; padding: 16px 12px; }
-    .stats { grid-template-columns: 1fr 1fr; }
+    .sidebar { width: 52px; overflow: hidden; }
+    .sidebar .logo h1, .sidebar .logo span, .sidebar-footer, .nav-section { display: none; }
+    .sidebar .logo { padding: 12px 8px; display:flex; justify-content:center; }
+    .nav-item span:last-child { display: none; }
+    .nav-item { justify-content: center; padding: 10px 8px; }
+    .nav-item .icon { width: auto; }
+    .nav-badge { right: 2px; top: 4px; font-size: 8px; padding: 1px 4px; min-width: 14px; }
+    .main { margin-left: 52px; padding: 14px 10px; }
+    .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-card { padding: 12px 14px; }
+    .stat-value { font-size: 20px; }
     .fin-grid { grid-template-columns: 1fr 1fr; }
     .form-row { grid-template-columns: 1fr; }
+    .toolbar { gap: 6px; }
+    .products-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .modal-overlay { padding: 8px; align-items: flex-end; }
+    .page-header h2 { font-size: 22px; }
+  }
+  @media (max-width: 420px) {
+    .stats { grid-template-columns: 1fr; }
+    .products-grid { grid-template-columns: 1fr; }
+  }
+  @supports (padding: env(safe-area-inset-bottom)) {
+    .app { padding-bottom: env(safe-area-inset-bottom); }
+    body { padding-top: env(safe-area-inset-top); }
   }
 `;
 

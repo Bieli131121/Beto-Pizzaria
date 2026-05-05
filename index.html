@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover habilita env(safe-area-inset-*) no iOS (notch / Dynamic Island / home indicator) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- iOS Web App meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- Previne zoom em inputs no iOS -->
+    <style>
+      input, select, textarea { font-size: 16px; }
+      * { -webkit-tap-highlight-color: transparent; }
+      html { scroll-behavior: smooth; }
+    </style>
     <meta name="description" content="Beto Pizzaria – Cardápio online, pedidos e reservas. Garopaba, SC." />
     <title>Beto Pizzaria · Garopaba</title>
   </head>

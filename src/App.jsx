@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePlatform } from "./usePlatform";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
 const supabase = createClient(
@@ -573,7 +574,20 @@ function ReservationModal({ onClose }) {
               <textarea value={f.obs} onChange={e=>setF({...f,obs:e.target.value})} placeholder="Aniversário, alergias…" rows={3}
                 style={{ width:"100%",padding:"9px 12px",border:"1.5px solid #DDD",borderRadius:9,fontSize:14,outline:"none",resize:"none",boxSizing:"border-box" }} />
             </div>
-            <button onClick={()=>ok&&setSent(true)} disabled={!ok}
+            <button onClick={async()=>{
+                if(!ok) return;
+                await supabase.from("reservas").insert([{
+                  nome: f.name,
+                  telefone: f.phone,
+                  data: f.date,
+                  horario: f.time,
+                  pessoas: f.guests,
+                  observacao: f.obs || "",
+                  status: "pendente",
+                  created_at: new Date().toISOString()
+                }]);
+                setSent(true);
+              }} disabled={!ok}
               style={{ width:"100%",padding:13,background:ok?C.red:"#CCC",color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:ok?"pointer":"not-allowed" }}>
               Confirmar Reserva
             </button>
@@ -644,6 +658,8 @@ function CartSidebar({ cart, onRemove, onClear, onCheckout, onClose }) {
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function App() {
+  const { isMobile, isIOS, safeArea } = usePlatform();
+
   const [section, setSection] = useState("inicio");
   const [cat, setCat] = useState("Tradicionais");
   const [cart, setCart] = useState([]);
@@ -653,11 +669,18 @@ export default function App() {
   const [flash, setFlash] = useState(null);
   const [sizes, setSizes] = useState({});
 
+  // ── Valores responsivos ───────────────────────────────────────────────────
+  const bottomBarH = isMobile ? 56 + safeArea.bottom : 0;
+  const contentPadX = isMobile ? 14 : 20;
+  const gridCols = isMobile
+    ? "repeat(auto-fill, minmax(155px, 1fr))"
+    : "repeat(auto-fill, minmax(272px, 1fr))";
+
   const navItems = [
-    { id:"inicio", label:"Início" },
-    { id:"cardapio", label:"Cardápio" },
-    { id:"bebidas", label:"Bebidas" },
-    { id:"contato", label:"Contato" },
+    { id:"inicio",   label:"Início",   icon:"🏠" },
+    { id:"cardapio", label:"Cardápio", icon:"🍕" },
+    { id:"bebidas",  label:"Bebidas",  icon:"🥤" },
+    { id:"contato",  label:"Contato",  icon:"📍" },
   ];
 
   function addToCart(item) {
@@ -674,100 +697,183 @@ export default function App() {
   const totalItems = cart.length;
   const totalPrice = cart.reduce((s,i)=>s+i.price, 0);
 
-  return (
-    <div style={{ fontFamily:"Georgia,serif",background:C.offWhite,minHeight:"100vh",color:C.dark }}>
+  // ── Estilos derivados da plataforma ──────────────────────────────────────
+  const navStyle = {
+    position:"sticky", top:0, zIndex:100,
+    background:"#fff",
+    borderBottom:`2px solid ${C.lightGray}`,
+    boxShadow:"0 2px 12px rgba(0,0,0,0.06)",
+    // iOS: respeita a safe-area no topo (Dynamic Island / notch)
+    paddingTop: isIOS ? `max(${safeArea.top}px, env(safe-area-inset-top))` : 0,
+  };
 
-      {/* NAV */}
-      <nav style={{ position:"sticky",top:0,zIndex:100,background:"#fff",borderBottom:`2px solid ${C.lightGray}`,boxShadow:"0 2px 12px rgba(0,0,0,0.06)" }}>
-        <div style={{ maxWidth:1100,margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",gap:8,height:66 }}>
-          <img src={`data:image/jpeg;base64,${LOGO_B64}`} alt="Beto Pizzaria" style={{ height:50,width:50,objectFit:"contain",borderRadius:6 }} />
+  const innerNavStyle = {
+    maxWidth:1100, margin:"0 auto",
+    padding:`0 ${contentPadX}px`,
+    display:"flex", alignItems:"center", gap:8, height:66,
+  };
+
+  // Wrapper geral com padding-bottom para não ficar atrás da bottom-nav mobile
+  const pageWrapStyle = {
+    fontFamily:"Georgia,serif",
+    background:C.offWhite,
+    minHeight:"100vh",
+    color:C.dark,
+    paddingBottom: isMobile ? bottomBarH : 0,
+    // iOS: safe-area lateral (landscape)
+    paddingLeft: isIOS ? `env(safe-area-inset-left)` : 0,
+    paddingRight: isIOS ? `env(safe-area-inset-right)` : 0,
+  };
+
+  // Bottom nav (mobile only)
+  const bottomNavStyle = {
+    position:"fixed",
+    bottom:0, left:0, right:0,
+    zIndex:200,
+    background:"#fff",
+    borderTop:`1px solid ${C.lightGray}`,
+    display:"flex",
+    paddingBottom: isIOS
+      ? `max(${safeArea.bottom}px, env(safe-area-inset-bottom))`
+      : `${safeArea.bottom}px`,
+    boxShadow:"0 -2px 12px rgba(0,0,0,0.08)",
+  };
+
+  const bottomNavItem = (id, label, icon) => ({
+    flex:1, display:"flex", flexDirection:"column", alignItems:"center",
+    justifyContent:"center", gap:2, padding:"8px 4px",
+    background:"none", border:"none", cursor:"pointer",
+    color: section===id ? C.red : C.gray,
+  });
+
+  // Seção interna
+  const sectionStyle = {
+    maxWidth:1100,
+    margin:"0 auto",
+    padding: isMobile ? `24px ${contentPadX}px` : `40px 20px`,
+  };
+
+  return (
+    <div style={pageWrapStyle}>
+
+      {/* ── NAV ── */}
+      <nav style={navStyle}>
+        <div style={innerNavStyle}>
+          <img src={`data:image/jpeg;base64,${LOGO_B64}`} alt="Beto Pizzaria"
+            style={{ height:isMobile?40:50, width:isMobile?40:50, objectFit:"contain", borderRadius:6 }} />
           <div style={{ marginLeft:4 }}>
-            <div style={{ fontFamily:"Georgia,serif",fontWeight:"bold",fontSize:17,color:C.red,letterSpacing:0.5 }}>BETO PIZZARIA</div>
-            <div style={{ fontSize:10,color:C.gray,letterSpacing:2,textTransform:"uppercase",fontFamily:"sans-serif" }}>Garopaba · SC</div>
+            <div style={{ fontFamily:"Georgia,serif", fontWeight:"bold", fontSize:isMobile?14:17, color:C.red, letterSpacing:0.5 }}>
+              BETO PIZZARIA
+            </div>
+            {!isMobile && (
+              <div style={{ fontSize:10, color:C.gray, letterSpacing:2, textTransform:"uppercase", fontFamily:"sans-serif" }}>
+                Garopaba · SC
+              </div>
+            )}
           </div>
-          <div style={{ display:"flex",gap:2,marginLeft:"auto",alignItems:"center" }}>
-            {navItems.map(n=>(
-              <button key={n.id} onClick={()=>setSection(n.id)}
-                style={{ padding:"7px 14px",background:section===n.id?C.red:"transparent",color:section===n.id?"#fff":C.dark,border:section===n.id?"none":`1px solid transparent`,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"sans-serif",fontWeight:section===n.id?700:400,transition:"all 0.15s" }}>
-                {n.label}
+
+          {/* Desktop: links de navegação inline */}
+          {!isMobile && (
+            <div style={{ display:"flex", gap:2, marginLeft:"auto", alignItems:"center" }}>
+              {navItems.map(n=>(
+                <button key={n.id} onClick={()=>setSection(n.id)}
+                  style={{ padding:"7px 14px", background:section===n.id?C.red:"transparent", color:section===n.id?"#fff":C.dark, border:section===n.id?"none":"1px solid transparent", borderRadius:8, cursor:"pointer", fontSize:13, fontFamily:"sans-serif", fontWeight:section===n.id?700:400, transition:"all 0.15s" }}>
+                  {n.label}
+                </button>
+              ))}
+              <button onClick={()=>setShowRes(true)}
+                style={{ padding:"7px 14px", background:C.green, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:13, fontFamily:"sans-serif", fontWeight:600, marginLeft:4 }}>
+                🍽️ Reservar
               </button>
-            ))}
-            <button onClick={()=>setShowRes(true)}
-              style={{ padding:"7px 14px",background:C.green,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"sans-serif",fontWeight:600,marginLeft:4 }}>
-              🍽️ Reservar
-            </button>
-          </div>
-          <button onClick={()=>setShowCart(true)} style={{ marginLeft:10,position:"relative",background:totalItems>0?C.red:"#F5F0EB",border:`1.5px solid ${totalItems>0?C.red:C.border}`,borderRadius:9,padding:"7px 13px",cursor:"pointer",color:totalItems>0?"#fff":C.gray,display:"flex",alignItems:"center",gap:6,transition:"all 0.2s" }}>
-            <span style={{ fontSize:16 }}>🛒</span>
-            {totalItems>0&&<span style={{ fontSize:13,fontFamily:"sans-serif",fontWeight:700 }}>R$ {totalPrice.toFixed(0)}</span>}
-            {totalItems>0&&<span style={{ position:"absolute",top:-7,right:-7,background:C.green,color:"#fff",borderRadius:"50%",width:19,height:19,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,fontFamily:"sans-serif" }}>{totalItems}</span>}
+            </div>
+          )}
+
+          {/* Carrinho — sempre visível na nav */}
+          <button onClick={()=>setShowCart(true)}
+            style={{ marginLeft:"auto", position:"relative", background:totalItems>0?C.red:"#F5F0EB", border:`1.5px solid ${totalItems>0?C.red:C.border}`, borderRadius:9, padding:isMobile?"6px 10px":"7px 13px", cursor:"pointer", color:totalItems>0?"#fff":C.gray, display:"flex", alignItems:"center", gap:6, transition:"all 0.2s" }}>
+            <span style={{ fontSize:isMobile?15:16 }}>🛒</span>
+            {totalItems>0 && !isMobile && (
+              <span style={{ fontSize:13, fontFamily:"sans-serif", fontWeight:700 }}>R$ {totalPrice.toFixed(0)}</span>
+            )}
+            {totalItems>0 && (
+              <span style={{ position:"absolute", top:-7, right:-7, background:C.green, color:"#fff", borderRadius:"50%", width:19, height:19, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, fontFamily:"sans-serif" }}>
+                {totalItems}
+              </span>
+            )}
           </button>
         </div>
       </nav>
 
-      {/* FLASH */}
-      {flash&&(
-        <div style={{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:C.green,color:"#fff",padding:"11px 22px",borderRadius:40,fontFamily:"sans-serif",fontSize:13,fontWeight:700,zIndex:500,whiteSpace:"nowrap",boxShadow:"0 4px 16px rgba(0,0,0,0.15)" }}>
+      {/* ── FLASH ── */}
+      {flash && (
+        <div style={{ position:"fixed", bottom: isMobile ? bottomBarH+12 : 24, left:"50%", transform:"translateX(-50%)", background:C.green, color:"#fff", padding:"11px 22px", borderRadius:40, fontFamily:"sans-serif", fontSize:13, fontWeight:700, zIndex:500, whiteSpace:"nowrap", boxShadow:"0 4px 16px rgba(0,0,0,0.15)" }}>
           ✓ {flash} adicionado!
         </div>
       )}
 
-      {/* HERO */}
-      {section==="inicio"&&(
+      {/* ══════════════════ SEÇÃO: INÍCIO ══════════════════ */}
+      {section==="inicio" && (
         <>
-          <section style={{ background:"#fff",padding:"60px 20px 50px",textAlign:"center",borderBottom:`1px solid ${C.lightGray}` }}>
-            <img src={`data:image/jpeg;base64,${LOGO_B64}`} alt="Beto Pizzaria" style={{ width:140,height:140,objectFit:"contain",borderRadius:12,marginBottom:24 }} />
-            <h1 style={{ fontFamily:"Georgia,serif",fontSize:42,color:C.red,margin:"0 0 8px",letterSpacing:-0.5 }}>Beto Pizzaria</h1>
-            <p style={{ fontSize:16,color:C.gray,margin:"0 0 6px",fontFamily:"sans-serif" }}>Garopaba · SC</p>
-            <p style={{ fontSize:14,color:C.gray,margin:"0 0 36px",fontFamily:"sans-serif" }}>Rodízio e À La Carte · Seg a Dom das 19h às 23h</p>
-            <div style={{ display:"flex",gap:14,justifyContent:"center",flexWrap:"wrap" }}>
+          {/* Hero */}
+          <section style={{ background:"#fff", padding: isMobile ? "36px 20px 28px" : "60px 20px 50px", textAlign:"center", borderBottom:`1px solid ${C.lightGray}` }}>
+            <img src={`data:image/jpeg;base64,${LOGO_B64}`} alt="Beto Pizzaria"
+              style={{ width:isMobile?100:140, height:isMobile?100:140, objectFit:"contain", borderRadius:12, marginBottom:isMobile?16:24 }} />
+            <h1 style={{ fontFamily:"Georgia,serif", fontSize:isMobile?28:42, color:C.red, margin:"0 0 8px", letterSpacing:-0.5 }}>
+              Beto Pizzaria
+            </h1>
+            <p style={{ fontSize:isMobile?13:16, color:C.gray, margin:"0 0 6px", fontFamily:"sans-serif" }}>Garopaba · SC</p>
+            <p style={{ fontSize:isMobile?12:14, color:C.gray, margin:"0 0 28px", fontFamily:"sans-serif" }}>
+              Rodízio e À La Carte · Seg a Dom das 19h às 23h
+            </p>
+            <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
               <button onClick={()=>setSection("cardapio")}
-                style={{ padding:"13px 28px",background:C.red,color:"#fff",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"sans-serif" }}>
+                style={{ padding: isMobile?"11px 22px":"13px 28px", background:C.red, color:"#fff", border:"none", borderRadius:10, fontSize:isMobile?14:15, fontWeight:700, cursor:"pointer", fontFamily:"sans-serif" }}>
                 🍕 Ver Cardápio
               </button>
               <button onClick={()=>setShowRes(true)}
-                style={{ padding:"13px 28px",background:"#fff",color:C.green,border:`2px solid ${C.green}`,borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"sans-serif" }}>
+                style={{ padding: isMobile?"11px 22px":"13px 28px", background:"#fff", color:C.green, border:`2px solid ${C.green}`, borderRadius:10, fontSize:isMobile?14:15, fontWeight:700, cursor:"pointer", fontFamily:"sans-serif" }}>
                 🍽️ Reservar Mesa
               </button>
             </div>
           </section>
 
-          <section style={{ maxWidth:900,margin:"0 auto",padding:"40px 20px" }}>
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16 }}>
+          {/* Info cards */}
+          <section style={{ maxWidth:900, margin:"0 auto", padding: isMobile ? "24px 14px" : "40px 20px" }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(auto-fit,minmax(180px,1fr))", gap:isMobile?10:16 }}>
               {[
-                { icon:"🍕",title:"70+ sabores",sub:"Tradicionais, Especiais, Carnes, Mar e Doces" },
-                { icon:"🏠",title:"Ambiente familiar",sub:"Espaço aconchegante em Garopaba" },
-                { icon:"💳",title:"Stone Pagamentos",sub:"Débito, crédito, parcelado e PIX" },
-                { icon:"📍",title:"Rod. SC-434",sub:"Garopaba, Santa Catarina" },
+                { icon:"🍕", title:"70+ sabores", sub:"Tradicionais, Especiais, Carnes, Mar e Doces" },
+                { icon:"🏠", title:"Ambiente familiar", sub:"Espaço aconchegante em Garopaba" },
+                { icon:"💳", title:"Stone Pagamentos", sub:"Débito, crédito, parcelado e PIX" },
+                { icon:"📍", title:"Rod. SC-434", sub:"Garopaba, Santa Catarina" },
               ].map(({icon,title,sub})=>(
-                <div key={title} style={{ background:"#fff",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"20px 18px",textAlign:"center" }}>
-                  <div style={{ fontSize:32,marginBottom:10 }}>{icon}</div>
-                  <p style={{ margin:"0 0 4px",fontWeight:700,fontSize:15,fontFamily:"Georgia,serif",color:C.dark }}>{title}</p>
-                  <p style={{ margin:0,fontSize:12,color:C.gray,fontFamily:"sans-serif",lineHeight:1.5 }}>{sub}</p>
+                <div key={title} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, padding: isMobile ? "14px 12px" : "20px 18px", textAlign:"center" }}>
+                  <div style={{ fontSize:isMobile?26:32, marginBottom:8 }}>{icon}</div>
+                  <p style={{ margin:"0 0 4px", fontWeight:700, fontSize:isMobile?13:15, fontFamily:"Georgia,serif", color:C.dark }}>{title}</p>
+                  <p style={{ margin:0, fontSize:isMobile?11:12, color:C.gray, fontFamily:"sans-serif", lineHeight:1.5 }}>{sub}</p>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Preview cards */}
-          <section style={{ maxWidth:1100,margin:"0 auto",padding:"0 20px 60px" }}>
-            <h2 style={{ fontFamily:"Georgia,serif",fontSize:28,color:C.dark,margin:"0 0 24px",textAlign:"center" }}>
+          {/* Destaques */}
+          <section style={{ maxWidth:1100, margin:"0 auto", padding: isMobile ? "0 14px 32px" : "0 20px 60px" }}>
+            <h2 style={{ fontFamily:"Georgia,serif", fontSize:isMobile?22:28, color:C.dark, margin:"0 0 16px", textAlign:"center" }}>
               <span style={{ color:C.red }}>Destaques</span> do Cardápio
             </h2>
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:14 }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(auto-fill,minmax(240px,1fr))", gap:isMobile?10:14 }}>
               {[
-                { cat:"Carnes",name:"Picanha",desc:"Mussarela e Tiras de Picanha",price:"A partir de R$ 90" },
-                { cat:"Frutos do Mar",name:"Camarão",desc:"Mussarela, Camarão e Azeitonas",price:"A partir de R$ 100" },
-                { cat:"Especiais",name:"Pepperoni",desc:"Mussarela e Pepperoni",price:"A partir de R$ 80" },
-                { cat:"Doces",name:"Morango",desc:"Chocolate ao Leite e Morangos",price:"A partir de R$ 80" },
+                { cat:"Carnes",       name:"Picanha",   desc:"Mussarela e Tiras de Picanha",        price:"A partir de R$ 90" },
+                { cat:"Frutos do Mar",name:"Camarão",   desc:"Mussarela, Camarão e Azeitonas",      price:"A partir de R$ 100" },
+                { cat:"Especiais",    name:"Pepperoni", desc:"Mussarela e Pepperoni",                price:"A partir de R$ 80" },
+                { cat:"Doces",        name:"Morango",   desc:"Chocolate ao Leite e Morangos",       price:"A partir de R$ 80" },
               ].map(item=>(
-                <div key={item.name} style={{ background:"#fff",border:`1.5px solid ${C.border}`,borderRadius:14,padding:"18px",display:"flex",flexDirection:"column",gap:8 }}>
-                  <span style={{ fontSize:11,fontWeight:700,color:C.red,textTransform:"uppercase",letterSpacing:1,fontFamily:"sans-serif" }}>{item.cat}</span>
-                  <p style={{ margin:0,fontWeight:700,fontSize:16,fontFamily:"Georgia,serif" }}>{item.name}</p>
-                  <p style={{ margin:0,fontSize:12,color:C.gray,fontFamily:"sans-serif",flex:1 }}>{item.desc}</p>
-                  <p style={{ margin:0,fontWeight:700,fontSize:14,color:C.green,fontFamily:"sans-serif" }}>{item.price}</p>
+                <div key={item.name} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, padding: isMobile?"14px 12px":"18px", display:"flex", flexDirection:"column", gap:6 }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:C.red, textTransform:"uppercase", letterSpacing:1, fontFamily:"sans-serif" }}>{item.cat}</span>
+                  <p style={{ margin:0, fontWeight:700, fontSize:isMobile?14:16, fontFamily:"Georgia,serif" }}>{item.name}</p>
+                  <p style={{ margin:0, fontSize:isMobile?11:12, color:C.gray, fontFamily:"sans-serif", flex:1 }}>{item.desc}</p>
+                  <p style={{ margin:0, fontWeight:700, fontSize:isMobile?13:14, color:C.green, fontFamily:"sans-serif" }}>{item.price}</p>
                   <button onClick={()=>{ setSection("cardapio"); setCat(item.cat); }}
-                    style={{ padding:"8px",background:C.red,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"sans-serif",fontSize:13,fontWeight:600 }}>
+                    style={{ padding:"8px", background:C.red, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontFamily:"sans-serif", fontSize:isMobile?12:13, fontWeight:600 }}>
                     Ver no cardápio
                   </button>
                 </div>
@@ -777,56 +883,56 @@ export default function App() {
         </>
       )}
 
-      {/* CARDÁPIO */}
-      {section==="cardapio"&&(
-        <section style={{ maxWidth:1100,margin:"0 auto",padding:"40px 20px" }}>
-          <h2 style={{ fontFamily:"Georgia,serif",fontSize:34,color:C.red,margin:"0 0 6px" }}>Cardápio</h2>
-          <p style={{ fontFamily:"sans-serif",color:C.gray,margin:"0 0 28px",fontSize:13 }}>
+      {/* ══════════════════ SEÇÃO: CARDÁPIO ══════════════════ */}
+      {section==="cardapio" && (
+        <section style={sectionStyle}>
+          <h2 style={{ fontFamily:"Georgia,serif", fontSize:isMobile?26:34, color:C.red, margin:"0 0 4px" }}>Cardápio</h2>
+          <p style={{ fontFamily:"sans-serif", color:C.gray, margin:"0 0 20px", fontSize:isMobile?11:13, lineHeight:1.5 }}>
             Borda recheada: +R$ 20 · P = Pequena (25cm, 1 sabor) · M = Média (30cm, 2 sabores) · G = Grande (35cm, 3 sabores)
           </p>
 
-          {/* Category tabs */}
-          <div style={{ display:"flex",gap:8,marginBottom:26,flexWrap:"wrap" }}>
+          {/* Tabs de categoria — scroll horizontal no mobile */}
+          <div style={{ display:"flex", gap:7, marginBottom:isMobile?16:26, overflowX:"auto", paddingBottom:4, WebkitOverflowScrolling:"touch" }}>
             {Object.keys(MENU).map(c=>(
               <button key={c} onClick={()=>setCat(c)}
-                style={{ padding:"8px 18px",background:cat===c?C.red:"#fff",color:cat===c?"#fff":C.dark,border:`1.5px solid ${cat===c?C.red:C.border}`,borderRadius:22,cursor:"pointer",fontFamily:"sans-serif",fontSize:13,fontWeight:cat===c?700:400,transition:"all 0.15s" }}>
+                style={{ padding: isMobile?"7px 13px":"8px 18px", background:cat===c?C.red:"#fff", color:cat===c?"#fff":C.dark, border:`1.5px solid ${cat===c?C.red:C.border}`, borderRadius:22, cursor:"pointer", fontFamily:"sans-serif", fontSize:isMobile?12:13, fontWeight:cat===c?700:400, whiteSpace:"nowrap", flexShrink:0, transition:"all 0.15s" }}>
                 {c}
               </button>
             ))}
           </div>
 
-          {/* Prices */}
-          <div style={{ display:"flex",gap:10,marginBottom:22,flexWrap:"wrap" }}>
+          {/* Preços */}
+          <div style={{ display:"flex", gap:8, marginBottom:isMobile?16:22, flexWrap:"wrap" }}>
             {Object.entries(MENU[cat].prices).map(([sz,price])=>(
-              <div key={sz} style={{ background:C.red,color:"#fff",borderRadius:9,padding:"7px 16px",fontFamily:"sans-serif" }}>
-                <span style={{ fontSize:11,opacity:0.8 }}>{sz} · </span>
-                <strong style={{ fontSize:15 }}>R$ {price}</strong>
-                <span style={{ fontSize:10,opacity:0.7,display:"block" }}>{sz==="P"?"25cm · 1 sabor":sz==="M"?"30cm · 2 sabores":"35cm · 3 sabores"}</span>
+              <div key={sz} style={{ background:C.red, color:"#fff", borderRadius:9, padding: isMobile?"6px 12px":"7px 16px", fontFamily:"sans-serif" }}>
+                <span style={{ fontSize:10, opacity:0.8 }}>{sz} · </span>
+                <strong style={{ fontSize:isMobile?13:15 }}>R$ {price}</strong>
+                <span style={{ fontSize:9, opacity:0.7, display:"block" }}>{sz==="P"?"25cm · 1 sabor":sz==="M"?"30cm · 2 sabores":"35cm · 3 sabores"}</span>
               </div>
             ))}
           </div>
 
-          {/* Pizza grid */}
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(272px,1fr))",gap:14 }}>
+          {/* Grid de pizzas */}
+          <div style={{ display:"grid", gridTemplateColumns:gridCols, gap:isMobile?10:14 }}>
             {MENU[cat].items.map(pizza=>{
               const sz = sizes[pizza.name]||"M";
               const price = MENU[cat].prices[sz];
               return (
-                <div key={pizza.name} style={{ background:"#fff",borderRadius:14,border:`1.5px solid ${C.border}`,padding:"16px 16px 13px",display:"flex",flexDirection:"column",gap:7 }}>
+                <div key={pizza.name} style={{ background:"#fff", borderRadius:14, border:`1.5px solid ${C.border}`, padding: isMobile?"12px 12px 10px":"16px 16px 13px", display:"flex", flexDirection:"column", gap:isMobile?5:7 }}>
                   <div>
-                    <p style={{ margin:"0 0 3px",fontWeight:700,fontSize:15,fontFamily:"Georgia,serif",color:C.dark }}>{pizza.name}</p>
-                    <p style={{ margin:0,fontSize:11,color:C.gray,fontFamily:"sans-serif",lineHeight:1.5 }}>{pizza.desc}</p>
+                    <p style={{ margin:"0 0 2px", fontWeight:700, fontSize:isMobile?13:15, fontFamily:"Georgia,serif", color:C.dark }}>{pizza.name}</p>
+                    <p style={{ margin:0, fontSize:isMobile?10:11, color:C.gray, fontFamily:"sans-serif", lineHeight:1.4 }}>{pizza.desc}</p>
                   </div>
-                  <div style={{ display:"flex",gap:5,marginTop:2 }}>
+                  <div style={{ display:"flex", gap:4, marginTop:2 }}>
                     {Object.keys(MENU[cat].prices).map(s=>(
                       <button key={s} onClick={()=>setSizes({...sizes,[pizza.name]:s})}
-                        style={{ flex:1,padding:"5px",border:`1.5px solid ${sz===s?C.red:"#DDD"}`,borderRadius:6,background:sz===s?"#FFF0F0":"#fff",cursor:"pointer",fontSize:11,fontWeight:700,color:sz===s?C.red:C.gray,fontFamily:"sans-serif" }}>
+                        style={{ flex:1, padding:"4px 2px", border:`1.5px solid ${sz===s?C.red:"#DDD"}`, borderRadius:6, background:sz===s?"#FFF0F0":"#fff", cursor:"pointer", fontSize:isMobile?10:11, fontWeight:700, color:sz===s?C.red:C.gray, fontFamily:"sans-serif" }}>
                         {s}·R${MENU[cat].prices[s]}
                       </button>
                     ))}
                   </div>
                   <button onClick={()=>addPizza(cat,pizza)}
-                    style={{ padding:"9px",background:C.red,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"sans-serif",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
+                    style={{ padding: isMobile?"8px":"9px", background:C.red, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontFamily:"sans-serif", fontSize:isMobile?12:13, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
                     + Adicionar · R$ {price}
                   </button>
                 </div>
@@ -834,86 +940,133 @@ export default function App() {
             })}
           </div>
 
-          {/* Sides */}
-          <h3 style={{ fontFamily:"Georgia,serif",fontSize:24,color:C.dark,margin:"44px 0 14px" }}>Porções</h3>
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:10 }}>
+          {/* Porções */}
+          <h3 style={{ fontFamily:"Georgia,serif", fontSize:isMobile?20:24, color:C.dark, margin:"36px 0 12px" }}>Porções</h3>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile?"repeat(2,1fr)":"repeat(auto-fill,minmax(190px,1fr))", gap:isMobile?8:10 }}>
             {SIDES.map(item=>(
-              <div key={item.name} style={{ background:"#fff",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"14px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10 }}>
+              <div key={item.name} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, padding:isMobile?"12px":"14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
                 <div>
-                  <p style={{ margin:0,fontWeight:700,fontSize:14,fontFamily:"Georgia,serif" }}>{item.name}</p>
-                  <p style={{ margin:0,fontSize:15,fontWeight:800,color:C.red,fontFamily:"sans-serif" }}>R$ {item.price}</p>
+                  <p style={{ margin:0, fontWeight:700, fontSize:isMobile?13:14, fontFamily:"Georgia,serif" }}>{item.name}</p>
+                  <p style={{ margin:0, fontSize:isMobile?14:15, fontWeight:800, color:C.red, fontFamily:"sans-serif" }}>R$ {item.price}</p>
                 </div>
                 <button onClick={()=>addToCart({name:item.name,detail:"Porção",price:item.price})}
-                  style={{ background:C.red,color:"#fff",border:"none",borderRadius:7,width:32,height:32,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>+</button>
+                  style={{ background:C.red, color:"#fff", border:"none", borderRadius:7, width:32, height:32, cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>+</button>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* BEBIDAS */}
-      {section==="bebidas"&&(
-        <section style={{ maxWidth:1100,margin:"0 auto",padding:"40px 20px" }}>
-          <h2 style={{ fontFamily:"Georgia,serif",fontSize:34,color:C.red,margin:"0 0 28px" }}>Bebidas</h2>
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:10 }}>
+      {/* ══════════════════ SEÇÃO: BEBIDAS ══════════════════ */}
+      {section==="bebidas" && (
+        <section style={sectionStyle}>
+          <h2 style={{ fontFamily:"Georgia,serif", fontSize:isMobile?26:34, color:C.red, margin:"0 0 20px" }}>Bebidas</h2>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile?"repeat(2,1fr)":"repeat(auto-fill,minmax(250px,1fr))", gap:isMobile?8:10 }}>
             {DRINKS.map(item=>(
-              <div key={item.name} style={{ background:"#fff",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"14px",display:"flex",alignItems:"center",gap:10 }}>
-                <span style={{ fontSize:24 }}>🥤</span>
-                <div style={{ flex:1 }}>
-                  <p style={{ margin:"0 0 1px",fontWeight:600,fontSize:13,fontFamily:"sans-serif",color:C.dark }}>{item.name}</p>
-                  <p style={{ margin:0,fontSize:15,fontWeight:800,color:C.red,fontFamily:"sans-serif" }}>R$ {item.price}</p>
+              <div key={item.name} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, padding:isMobile?"11px":"14px", display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:isMobile?18:24 }}>🥤</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ margin:"0 0 1px", fontWeight:600, fontSize:isMobile?11:13, fontFamily:"sans-serif", color:C.dark, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:isMobile?"normal":"nowrap" }}>{item.name}</p>
+                  <p style={{ margin:0, fontSize:isMobile?13:15, fontWeight:800, color:C.red, fontFamily:"sans-serif" }}>R$ {item.price}</p>
                 </div>
                 <button onClick={()=>addToCart({name:item.name,detail:"Bebida",price:item.price})}
-                  style={{ background:C.red,color:"#fff",border:"none",borderRadius:7,width:32,height:32,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center" }}>+</button>
+                  style={{ background:C.red, color:"#fff", border:"none", borderRadius:7, width:30, height:30, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>+</button>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* CONTATO */}
-      {section==="contato"&&(
-        <section style={{ maxWidth:680,margin:"0 auto",padding:"40px 20px" }}>
-          <h2 style={{ fontFamily:"Georgia,serif",fontSize:34,color:C.red,margin:"0 0 28px" }}>Contato</h2>
-          <div style={{ display:"grid",gap:14 }}>
+      {/* ══════════════════ SEÇÃO: CONTATO ══════════════════ */}
+      {section==="contato" && (
+        <section style={{ ...sectionStyle, maxWidth:680 }}>
+          <h2 style={{ fontFamily:"Georgia,serif", fontSize:isMobile?26:34, color:C.red, margin:"0 0 20px" }}>Contato</h2>
+          <div style={{ display:"grid", gap:12 }}>
             {[
-              { icon:"📍",label:"Endereço",value:"Rod. SC-434, Garopaba — SC" },
-              { icon:"⏰",label:"Horário",value:"Segunda a Domingo · 19h às 23h" },
-              { icon:"📱",label:"Instagram",value:"@betopizzariagaropaba" },
-              { icon:"💳",label:"Pagamentos",value:"Stone · Débito · Crédito · PIX · Dinheiro" },
+              { icon:"📍", label:"Endereço",   value:"Rod. SC-434, Garopaba — SC" },
+              { icon:"⏰", label:"Horário",    value:"Segunda a Domingo · 19h às 23h" },
+              { icon:"📱", label:"Instagram",  value:"@betopizzariagaropaba" },
+              { icon:"💳", label:"Pagamentos", value:"Stone · Débito · Crédito · PIX · Dinheiro" },
             ].map(({icon,label,value})=>(
-              <div key={label} style={{ background:"#fff",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"16px 18px",display:"flex",alignItems:"center",gap:14 }}>
-                <span style={{ fontSize:26 }}>{icon}</span>
+              <div key={label} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, padding:isMobile?"13px 14px":"16px 18px", display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ fontSize:isMobile?22:26 }}>{icon}</span>
                 <div>
-                  <p style={{ margin:"0 0 2px",fontSize:11,color:C.gray,fontFamily:"sans-serif",textTransform:"uppercase",letterSpacing:1 }}>{label}</p>
-                  <p style={{ margin:0,fontWeight:600,fontSize:14,fontFamily:"sans-serif",color:C.dark }}>{value}</p>
+                  <p style={{ margin:"0 0 2px", fontSize:11, color:C.gray, fontFamily:"sans-serif", textTransform:"uppercase", letterSpacing:1 }}>{label}</p>
+                  <p style={{ margin:0, fontWeight:600, fontSize:isMobile?13:14, fontFamily:"sans-serif", color:C.dark }}>{value}</p>
                 </div>
               </div>
             ))}
           </div>
-          <div style={{ background:"#F0FBF5",border:"1.5px solid #B0EED2",borderRadius:12,padding:"18px 22px",marginTop:22,display:"flex",alignItems:"center",gap:14 }}>
-            <div style={{ background:"#00A868",borderRadius:8,padding:"6px 14px",fontWeight:900,fontSize:18,color:"#fff",letterSpacing:-0.5,flexShrink:0 }}>stone</div>
+          <div style={{ background:"#F0FBF5", border:"1.5px solid #B0EED2", borderRadius:12, padding:isMobile?"14px 16px":"18px 22px", marginTop:18, display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ background:"#00A868", borderRadius:8, padding:"6px 12px", fontWeight:900, fontSize:isMobile?15:18, color:"#fff", letterSpacing:-0.5, flexShrink:0 }}>stone</div>
             <div>
-              <p style={{ margin:"0 0 2px",fontWeight:700,fontSize:14,fontFamily:"sans-serif",color:"#007A4D" }}>Parceiro Stone</p>
-              <p style={{ margin:0,fontSize:12,color:C.gray,fontFamily:"sans-serif" }}>Pagamentos seguros com maquininha Stone. Débito, crédito à vista ou parcelado.</p>
+              <p style={{ margin:"0 0 2px", fontWeight:700, fontSize:isMobile?13:14, fontFamily:"sans-serif", color:"#007A4D" }}>Parceiro Stone</p>
+              <p style={{ margin:0, fontSize:isMobile?11:12, color:C.gray, fontFamily:"sans-serif" }}>Pagamentos seguros com maquininha Stone. Débito, crédito à vista ou parcelado.</p>
             </div>
           </div>
+
+          {/* Botão Reservar no contato (mobile) */}
+          {isMobile && (
+            <button onClick={()=>setShowRes(true)}
+              style={{ width:"100%", marginTop:18, padding:14, background:C.green, color:"#fff", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"sans-serif" }}>
+              🍽️ Reservar Mesa
+            </button>
+          )}
         </section>
       )}
 
-      {/* FOOTER */}
-      <footer style={{ background:C.dark,padding:"28px 20px",textAlign:"center",marginTop:40 }}>
-        <img src={`data:image/jpeg;base64,${LOGO_B64}`} alt="Beto Pizzaria" style={{ width:52,height:52,objectFit:"contain",borderRadius:6,marginBottom:10 }} />
-        <p style={{ color:"rgba(255,255,255,0.6)",fontFamily:"sans-serif",fontSize:12,margin:"0 0 3px" }}>© 2026 Beto Pizzaria · Garopaba, SC</p>
-        <p style={{ color:"rgba(255,255,255,0.4)",fontFamily:"sans-serif",fontSize:11,margin:"0 0 10px" }}>@betopizzariagaropaba · Rod. SC-434</p>
-        <p style={{ color:"rgba(255,255,255,0.25)",fontFamily:"sans-serif",fontSize:10,margin:0,letterSpacing:0.5 }}>
-          Desenvolvido por <a href="https://tecchti.vercel.app" target="_blank" rel="noopener noreferrer" style={{ color:"rgba(255,255,255,0.45)",textDecoration:"none",fontWeight:600 }}>TecchTI</a>
+      {/* ══════════════════ FOOTER ══════════════════ */}
+      <footer style={{ background:C.dark, padding:isMobile?"20px 14px":"28px 20px", textAlign:"center", marginTop:isMobile?16:40 }}>
+        <img src={`data:image/jpeg;base64,${LOGO_B64}`} alt="Beto Pizzaria"
+          style={{ width:isMobile?40:52, height:isMobile?40:52, objectFit:"contain", borderRadius:6, marginBottom:8 }} />
+        <p style={{ color:"rgba(255,255,255,0.6)", fontFamily:"sans-serif", fontSize:isMobile?11:12, margin:"0 0 3px" }}>
+          © 2026 Beto Pizzaria · Garopaba, SC
+        </p>
+        <p style={{ color:"rgba(255,255,255,0.4)", fontFamily:"sans-serif", fontSize:isMobile?10:11, margin:"0 0 8px" }}>
+          @betopizzariagaropaba · Rod. SC-434
+        </p>
+        <p style={{ color:"rgba(255,255,255,0.25)", fontFamily:"sans-serif", fontSize:10, margin:0, letterSpacing:0.5 }}>
+          Desenvolvido por{" "}
+          <a href="https://tecchti.vercel.app" target="_blank" rel="noopener noreferrer"
+            style={{ color:"rgba(255,255,255,0.45)", textDecoration:"none", fontWeight:600 }}>TecchTI</a>
         </p>
       </footer>
 
-      {showCart&&<CartSidebar cart={cart} onRemove={i=>setCart(c=>c.filter((_,idx)=>idx!==i))} onClear={()=>setCart([])} onCheckout={()=>{setShowCart(false);setShowPay(true);}} onClose={()=>setShowCart(false)} />}
-      {showPay&&<StoneModal cart={cart} total={cart.reduce((s,i)=>s+i.price,0)} onClose={()=>setShowPay(false)} onSuccess={()=>{setShowPay(false);setCart([]);}} />}
-      {showRes&&<ReservationModal onClose={()=>setShowRes(false)} />}
+      {/* ══════════════════ BOTTOM NAV (mobile only) ══════════════════ */}
+      {isMobile && (
+        <nav style={bottomNavStyle}>
+          {navItems.map(n=>(
+            <button key={n.id} onClick={()=>setSection(n.id)} style={bottomNavItem(n.id, n.label, n.icon)}>
+              <span style={{ fontSize:20 }}>{n.icon}</span>
+              <span style={{ fontSize:10, fontFamily:"sans-serif", fontWeight:section===n.id?700:400 }}>{n.label}</span>
+            </button>
+          ))}
+          <button onClick={()=>setShowRes(true)} style={{ ...bottomNavItem("reservar","Reservar","🍽️"), color:C.green }}>
+            <span style={{ fontSize:20 }}>🍽️</span>
+            <span style={{ fontSize:10, fontFamily:"sans-serif", fontWeight:400 }}>Reservar</span>
+          </button>
+        </nav>
+      )}
+
+      {/* ══════════════════ MODAIS ══════════════════ */}
+      {showCart && (
+        <CartSidebar
+          cart={cart}
+          onRemove={i=>setCart(c=>c.filter((_,idx)=>idx!==i))}
+          onClear={()=>setCart([])}
+          onCheckout={()=>{ setShowCart(false); setShowPay(true); }}
+          onClose={()=>setShowCart(false)}
+        />
+      )}
+      {showPay && (
+        <StoneModal
+          cart={cart}
+          total={cart.reduce((s,i)=>s+i.price,0)}
+          onClose={()=>setShowPay(false)}
+          onSuccess={()=>{ setShowPay(false); setCart([]); }}
+        />
+      )}
+      {showRes && <ReservationModal onClose={()=>setShowRes(false)} />}
     </div>
   );
 }
